@@ -1,0 +1,97 @@
+# Client Portal Configuration
+# NO MAGIC NUMBERS - Everything configurable
+
+# Client Portal Gateway settings
+client_portal:
+  # Connection details
+  host: "localhost"
+  port: 5000
+  base_url: "https://localhost:5000/v1/api"
+  
+  # SSL Configuration (self-signed cert)
+  ssl:
+    verify: false
+    cert_file: null
+    key_file: null
+    
+  # Connection timeouts and retries
+  timeouts:
+    connect: 10
+    read: 30
+    total: 60
+    
+  retry:
+    max_attempts: 3
+    backoff_factor: 2
+    retry_delay: 5
+    
+  # WebSocket settings
+  websocket:
+    url: "wss://localhost:5000/v1/api/ws"
+    ping_interval: 30
+    reconnect_delay: 5
+    max_reconnects: 10
+
+# Trading configuration
+trading:
+  # Account settings
+  account_id: ""  # Empty = use default account
+  mode: "paper"   # paper or live
+  
+  # Order defaults - NO HARDCODING
+  defaults:
+    time_in_force: "DAY"
+    outside_rth: false
+    currency: "USD"
+    exchange: "SMART"
+    
+  # Safety limits - CRITICAL
+  safety:
+    max_order_value: 10000.00
+    max_daily_trades: 50
+    max_position_size: 1000
+    min_price: 0.01
+    max_price: 10000.00
+    max_quantity: 10000
+    
+    # Allowed order types
+    allowed_order_types:
+      - "MKT"   # Market
+      - "LMT"   # Limit
+      - "STP"   # Stop
+      - "STP_LMT"  # Stop Limit
+    
+    # Restricted securities
+    forbidden_tickers:
+      - "SQQQ"  # Leveraged ETFs
+      - "TQQQ"
+      - "SPXL"
+      - "SPXS"
+
+# Data monitoring
+monitoring:
+  data_directories:
+    - "../Start Your Own"
+    - "../Scripts and CSV Files"
+  poll_interval: 60
+  checkpoint_file: ".cp_checkpoint.json"
+  
+# Logging configuration
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  
+  files:
+    api_log: "cp_api.log"
+    execution_log: "cp_execution_log.csv"
+    error_log: "cp_errors.log"
+    
+  rotation:
+    max_size_mb: 100
+    backup_count: 5
+    
+# Rate limiting
+rate_limits:
+  orders_per_second: 2
+  requests_per_minute: 100
+  burst_allowance: 5
