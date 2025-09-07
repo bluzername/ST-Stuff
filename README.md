@@ -38,14 +38,21 @@ So, starting with just $100, I wanted to answer a simple but powerful question:
 
 ## 🚀 Quick Start (TL;DR)
 
-This system consists of **three modules** that work together:
+This system consists of **four modules** that work together:
 
-1. **ChatGPT Trading Script** (`trading_script.py`) - Generates CSV trade signals
-2. **Interactive Brokers Module** (`ib_trading/`) - Executes trades automatically  
-3. **Web Monitor Interface** (`web_monitor/`) - Real-time pipeline monitoring
+1. **Autopilot Script** (`autopilot.sh`) - **Automated orchestration with time-based scheduling**
+2. **ChatGPT Trading Script** (`trading_script.py`) - Generates CSV trade signals
+3. **Interactive Brokers Module** (`ib_trading/`) - Executes trades automatically  
+4. **Web Monitor Interface** (`web_monitor/`) - Real-time pipeline monitoring
 
 **Essential Commands:**
 ```bash
+# AUTOMATED: Complete pipeline with scheduling (recommended)
+./autopilot.sh start    # Starts everything automatically
+./autopilot.sh status   # Check if running
+./autopilot.sh stop     # Graceful shutdown
+
+# MANUAL: Individual components
 # 1. Generate trade signals with ChatGPT
 python trading_script.py --file "Start Your Own/chatgpt_portfolio_update.csv"
 
@@ -53,7 +60,7 @@ python trading_script.py --file "Start Your Own/chatgpt_portfolio_update.csv"
 cd ib_trading
 python cp_executor.py --dry-run --show-trades
 
-# 3. Run live execution (requires IB Gateway running)
+# 3. Run live execution (requires Client Portal running)
 python cp_executor.py --execute-pending --date $(date +%Y-%m-%d)
 
 # 4. Start web monitoring dashboard (globally accessible)
@@ -269,7 +276,23 @@ display:
 
 ## 🎮 Usage Guide
 
-### Basic Usage
+### Automated Usage (Recommended)
+
+```bash
+# Complete automated pipeline - handles everything
+./autopilot.sh start     # Starts full pipeline with scheduling
+./autopilot.sh status    # Check system status  
+./autopilot.sh logs      # View recent activity
+./autopilot.sh stop      # Graceful shutdown
+
+# Control commands
+./autopilot.sh pause     # Pause trading (keep web monitor running)
+./autopilot.sh resume    # Resume trading operations
+./autopilot.sh force     # Force immediate portfolio update
+./autopilot.sh skip      # Skip next scheduled execution
+```
+
+### Manual Usage
 
 ```bash
 # Generate today's trade signals
@@ -745,6 +768,7 @@ print('Total volume:', df['total_cost'].sum())
 
 ```
 ChatGPT-Micro-Cap-Experiment/
+├── 🤖 autopilot.sh                   # **Automated pipeline orchestrator**
 ├── 📄 trading_script.py              # Main ChatGPT trading engine
 ├── 📊 Scripts and CSV Files/         # Live portfolio data (updates daily)
 │   ├── chatgpt_trade_log.csv
@@ -843,16 +867,55 @@ If you feel inspired to do something similar, feel free to use this as a bluepri
 
 ## 🚀 Getting Started
 
+### Quick Setup
+
 1. **Clone the repository**
 2. **Set up Python environment** (see Installation section)
-3. **Configure Interactive Brokers** (paper trading recommended)
-4. **Start with the "Start Your Own" template**
-5. **Run web monitoring dashboard**
-6. **Start small, test thoroughly, scale gradually**
+3. **Configure Interactive Brokers Client Portal** (paper trading recommended)
+4. **Start the autopilot system:**
+   ```bash
+   ./autopilot.sh start
+   ```
+   This automatically:
+   - ✅ Activates virtual environment
+   - ✅ Starts web monitor on port 8889
+   - ✅ Schedules daily updates at 4:15 PM ET
+   - ✅ Schedules trade execution at 9:15 AM ET
+   - ✅ Provides real-time pipeline monitoring
+
+5. **Monitor your system globally** at http://localhost:8889 or http://YOUR_IP:8889
+
+### Step-by-Step Guide
+
+1. **Clone & Setup:**
+   ```bash
+   git clone <repository>
+   cd ChatGPT-Micro-Cap-Experiment
+   python -m venv venv
+   source venv/bin/activate  # Windows: venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+
+2. **Test Individual Components:**
+   ```bash
+   # Test ChatGPT script
+   python trading_script.py --file "Start Your Own/chatgpt_portfolio_update.csv"
+   
+   # Test trade detection
+   cd ib_trading
+   python cp_executor.py --dry-run --show-trades
+   ```
+
+3. **Configure Client Portal** (see Installation section)
+
+4. **Start Autopilot:**
+   ```bash
+   ./autopilot.sh start
+   ```
 
 **⚠️ Start small, test thoroughly in paper mode, and scale gradually for the best results.**
 
-The web monitoring interface provides unprecedented visibility into your automated trading pipeline. Monitor your system from anywhere in the world with the globally accessible dashboard.
+The autopilot system provides complete automation with unprecedented visibility into your trading pipeline. Monitor your system from anywhere in the world with the globally accessible dashboard.
 
 ---
 

@@ -10,6 +10,12 @@
 
 set -euo pipefail  # Because we're not amateurs
 
+# Virtual environment activation
+VENV_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/venv"
+if [[ -d "$VENV_DIR" ]]; then
+    source "$VENV_DIR/bin/activate"
+fi
+
 # Configuration - Because hardcoding is for idiots
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="$SCRIPT_DIR/autopilot.log"
@@ -131,7 +137,7 @@ start_web_monitor() {
     cd "$WEB_DIR"
     
     # Start in background and capture PID
-    python app.py > "$LOG_FILE.web" 2>&1 &
+    "$VENV_DIR/bin/python" app.py > "$LOG_FILE.web" 2>&1 &
     local pid=$!
     
     # Give it a moment to start
@@ -177,7 +183,7 @@ run_daily_update() {
     
     info "Running daily portfolio update..."
     
-    if ! python "$SCRIPT_DIR/trading_script.py" --file "$PORTFOLIO_FILE" >> "$LOG_FILE" 2>&1; then
+    if ! "$VENV_DIR/bin/python" "$SCRIPT_DIR/trading_script.py" --file "$PORTFOLIO_FILE" >> "$LOG_FILE" 2>&1; then
         error "Daily update failed"
         return 1
     fi
@@ -207,7 +213,7 @@ execute_pending_trades() {
     
     # First check what we have pending
     local pending_count
-    if ! pending_count=$(python ib_executor.py --dry-run --show-trades 2>/dev/null | grep -c "^BUY\|^SELL" || echo "0"); then
+    if ! pending_count=$("$VENV_DIR/bin/python" cp_executor.py --dry-run --show-trades 2>/dev/null | grep -c "^BUY\|^SELL" || echo "0"); then
         pending_count=0
     fi
     
@@ -220,7 +226,7 @@ execute_pending_trades() {
     info "Found $pending_count pending trades"
     
     # Execute the trades
-    if python ib_executor.py --execute-pending --date "$today" --no-confirm >> "$LOG_FILE" 2>&1; then
+    if "$VENV_DIR/bin/python" cp_executor.py --execute-pending --date "$today" --no-confirm >> "$LOG_FILE" 2>&1; then
         LAST_TRADE_EXECUTION="$today"
         save_state
         info "Trade execution completed successfully"

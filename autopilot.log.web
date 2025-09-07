@@ -1,1 +1,19 @@
-./autopilot.sh: line 134: python: command not found
+2025-09-07 08:35:34,503 - cache - INFO - Started watching directory: ../Scripts and CSV Files
+2025-09-07 08:35:34,504 - cache - INFO - Started watching directory: ../Start Your Own
+2025-09-07 08:35:34,505 - cache - INFO - Started watching directory: ../ib_trading
+2025-09-07 08:35:34,508 - __main__ - INFO - Starting Trading Pipeline Monitor on 0.0.0.0:8889
+2025-09-07 08:35:34,508 - __main__ - INFO - Monitoring directories: ['../Scripts and CSV Files', '../Start Your Own', '../ib_trading']
+2025-09-07 08:35:34,508 - __main__ - INFO - Global access enabled - server accessible from internet
+2025-09-07 08:35:34,547 - cache - INFO - Started watching directory: ../Scripts and CSV Files
+2025-09-07 08:35:34,548 - cache - INFO - Started watching directory: ../Start Your Own
+2025-09-07 08:35:34,549 - cache - INFO - Started watching directory: ../ib_trading
+INFO:     Started server process [318191]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8889 (Press CTRL+C to quit)
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [318191]
+2025-09-07 08:35:43,709 - cache - INFO - Stopped all file watchers
+2025-09-07 08:35:43,815 - cache - INFO - Stopped all file watchers
