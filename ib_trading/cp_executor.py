@@ -47,15 +47,26 @@ class ClientPortalExecutor:
         
         self.logger = logging.getLogger(__name__)
         
-        # Setup console logging
+        # Setup logging: console + file (cp_api.log) so monitor can see connection messages
         if not self.logger.handlers:
-            handler = logging.StreamHandler()
-            formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
+            console_handler = logging.StreamHandler()
+            console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+            console_handler.setFormatter(console_formatter)
+            self.logger.addHandler(console_handler)
+
+            try:
+                api_log_path = self.connection.config['logging']['files']['api_log']
+                file_handler = logging.FileHandler(api_log_path)
+                file_formatter = logging.Formatter(self.connection.config['logging']['format'])
+                file_handler.setFormatter(file_formatter)
+                self.logger.addHandler(file_handler)
+            except Exception:
+                # If file handler fails, we still have console output
+                pass
+
             self.logger.setLevel(logging.INFO)
     
-    def connect_to_client_portal(self) -> bool:
+    def connect_to_client_portal(self, allow_reauth: bool = True) -> bool:
         """Connect to Client Portal Gateway"""
         self.logger.info("Connecting to Client Portal Gateway...")
         
@@ -65,7 +76,7 @@ class ClientPortalExecutor:
             return False
         
         # Authenticate
-        if not self.connection.authenticate():
+        if not self.connection.authenticate(allow_reauth=allow_reauth):
             self.logger.error("Authentication failed")
             return False
         
@@ -388,6 +399,8 @@ Examples:
                         help='Show execution history')
     parser.add_argument('--reconcile', action='store_true',
                         help='Compare Client Portal positions with CSV portfolio')
+    parser.add_argument('--check-connection', action='store_true',
+                        help='Check/establish Client Portal connection and exit')
     
     # Options
     parser.add_argument('--days', type=int, default=7,
@@ -416,6 +429,12 @@ Examples:
     
     # Handle different modes
     try:
+        if args.check_connection:
+            ok = executor.connect_to_client_portal(allow_reauth=False)
+            # Always disconnect cleanly
+            executor.connection.disconnect()
+            return 0 if ok else 1
+
         if args.show_trades or args.dry_run:
             # Show trades without connecting to Client Portal
             trades = executor.get_all_pending_trades(args.date)

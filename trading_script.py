@@ -29,6 +29,13 @@ import yfinance as yf
 import json
 import logging
 
+# Import pipeline logger
+from pipeline_logger import (
+    get_pipeline_logger, log_startup, log_portfolio_update, 
+    log_execution_start, log_execution_complete, log_execution_failed,
+    log_pipeline_error, ActionCategory
+)
+
 # Optional pandas-datareader import for Stooq access
 try:
     import pandas_datareader.data as pdr
@@ -1144,15 +1151,42 @@ def load_latest_portfolio_state(
     return latest_tickers, cash
 
 
-def main(file: str, data_dir: Path | None = None) -> None:
+def main(file: str, data_dir: Path | None = None, interactive: bool = True) -> None:
     """Check versions, then run the trading script."""
-    chatgpt_portfolio, cash = load_latest_portfolio_state(file)
-    print(file)
-    if data_dir is not None:
-        set_data_dir(data_dir)
+    import time
+    start_time = time.time()
+    
+    # Log script startup
+    startup_details = {
+        "file": file,
+        "data_dir": str(data_dir) if data_dir else None,
+        "asof_date": str(ASOF_DATE) if ASOF_DATE else None
+    }
+    main_exec_id = log_startup("trading_script", startup_details)
+    log_execution_start(main_exec_id)
+    
+    try:
+        chatgpt_portfolio, cash = load_latest_portfolio_state(file)
+        print(file)
+        if data_dir is not None:
+            set_data_dir(data_dir)
 
-    chatgpt_portfolio, cash = process_portfolio(chatgpt_portfolio, cash)
-    daily_results(chatgpt_portfolio, cash)
+        chatgpt_portfolio, cash = process_portfolio(chatgpt_portfolio, cash, interactive)
+        daily_results(chatgpt_portfolio, cash)
+        
+        # Log successful completion
+        duration = (time.time() - start_time) * 1000
+        log_execution_complete(main_exec_id, duration, {
+            "portfolio_positions": len(chatgpt_portfolio) if hasattr(chatgpt_portfolio, '__len__') else 0,
+            "cash_balance": cash
+        })
+        
+    except Exception as e:
+        # Log execution failure
+        duration = (time.time() - start_time) * 1000
+        log_execution_failed(main_exec_id, duration, str(e))
+        log_pipeline_error(ActionCategory.ERROR, "Trading script execution failed", e)
+        raise
 
 
 if __name__ == "__main__":
@@ -1165,6 +1199,7 @@ if __name__ == "__main__":
     parser.add_argument("--file", default=str(csv_path), help="Path to chatgpt_portfolio_update.csv")
     parser.add_argument("--data-dir", default=None, help="Optional data directory")
     parser.add_argument("--asof", default=None, help="Treat this YYYY-MM-DD as 'today' (e.g., 2025-08-27)")
+    parser.add_argument("--no-interactive", action="store_true", help="Disable manual trade prompts for automated execution")
     args = parser.parse_args()
 
     if args.asof:
@@ -1173,4 +1208,4 @@ if __name__ == "__main__":
     if not Path(args.file).exists():
         print("No portfolio CSV found. Create one or run main() with your file path.")
     else:
-        main(args.file, Path(args.data_dir) if args.data_dir else None)
+        main(args.file, Path(args.data_dir) if args.data_dir else None, interactive=not args.no_interactive)

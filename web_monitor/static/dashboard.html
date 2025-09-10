@@ -94,6 +94,10 @@
             <div class="panel performance-panel">
                 <div class="panel-header">
                     Performance Metrics
+                    <div>
+                        <button id="daily-view-btn" class="chart-toggle active">Daily</button>
+                        <button id="monthly-view-btn" class="chart-toggle">Monthly</button>
+                    </div>
                 </div>
                 <div class="panel-content">
                     <div class="performance-panel">
@@ -101,7 +105,7 @@
                         <div class="metrics-grid">
                             <div class="metric-item">
                                 <div class="metric-value positive" id="daily-pnl">+$0.00</div>
-                                <div class="metric-label">Daily P&L</div>
+                                <div class="metric-label">Unrealized P&L</div>
                             </div>
                             <div class="metric-item">
                                 <div class="metric-value" id="daily-volume">$0</div>
@@ -139,6 +143,9 @@
         </footer>
     </div>
 
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
     <!-- JavaScript -->
     <script src="/static/monitor.js"></script>
     

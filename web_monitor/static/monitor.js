@@ -23,6 +23,7 @@ class TradingMonitor {
         this.cacheElements();
         this.setupWebSocket();
         this.setupEventListeners();
+        this.setupChart();
         this.startHeartbeat();
         
         console.log('Trading Monitor initialized');
@@ -56,13 +57,101 @@ class TradingMonitor {
         this.elements.avgSlippage = document.getElementById('avg-slippage');
         this.elements.dailyTrades = document.getElementById('daily-trades');
         
-        // Chart canvas
+        // Chart canvas and toggle buttons
         this.elements.performanceChart = document.getElementById('performance-chart');
+        this.elements.dailyViewBtn = document.getElementById('daily-view-btn');
+        this.elements.monthlyViewBtn = document.getElementById('monthly-view-btn');
         
         // Logs
         this.elements.logContainer = document.getElementById('log-container');
         
         console.log('DOM elements cached');
+    }
+    
+    setupChart() {
+        // Initialize Chart.js combination chart - Linus style: simple and works
+        const ctx = this.elements.performanceChart.getContext('2d');
+        
+        this.chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        type: 'line',
+                        label: 'Portfolio Returns %',
+                        data: [],
+                        borderColor: '#00ff88',
+                        backgroundColor: 'rgba(0, 255, 136, 0.1)',
+                        fill: false,
+                        yAxisID: 'y',
+                        order: 1
+                    },
+                    {
+                        type: 'line', 
+                        label: 'S&P 500 %',
+                        data: [],
+                        borderColor: '#4488ff',
+                        backgroundColor: 'rgba(68, 136, 255, 0.1)',
+                        fill: false,
+                        yAxisID: 'y',
+                        order: 2
+                    },
+                    {
+                        type: 'line',
+                        label: 'TA-125 %', 
+                        data: [],
+                        borderColor: '#ffaa00',
+                        backgroundColor: 'rgba(255, 170, 0, 0.1)',
+                        fill: false,
+                        yAxisID: 'y',
+                        order: 3
+                    },
+                    {
+                        type: 'bar',
+                        label: 'Daily P&L $',
+                        data: [],
+                        backgroundColor: 'rgba(255, 68, 68, 0.6)',
+                        borderColor: '#ff4444',
+                        yAxisID: 'y1',
+                        order: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: { color: '#cccccc', font: { size: 11 } }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#cccccc', font: { size: 10 } },
+                        grid: { color: 'rgba(255,255,255,0.1)' }
+                    },
+                    y: {
+                        type: 'linear',
+                        position: 'left',
+                        title: { display: true, text: '% Return', color: '#cccccc' },
+                        ticks: { color: '#cccccc', font: { size: 10 } },
+                        grid: { color: 'rgba(255,255,255,0.1)' }
+                    },
+                    y1: {
+                        type: 'linear', 
+                        position: 'right',
+                        title: { display: true, text: 'Daily P&L ($)', color: '#cccccc' },
+                        ticks: { color: '#cccccc', font: { size: 10 } },
+                        grid: { drawOnChartArea: false }
+                    }
+                }
+            }
+        });
+        
+        console.log('Chart initialized');
     }
     
     setupWebSocket() {
@@ -111,6 +200,8 @@ class TradingMonitor {
         switch (data.type) {
             case 'initial':
                 this.updateAllData(data);
+                // Load chart data on initial connect
+                this.switchChartView('daily');
                 break;
             case 'update':
                 this.fetchAndUpdateAll();
@@ -300,8 +391,7 @@ class TradingMonitor {
             this.elements.dailyTrades.textContent = (executions.daily_trades || 0).toString();
         }
         
-        // TODO: Update performance chart
-        this.updatePerformanceChart(performance);
+        // Chart is managed via updateChart() + switchChartView(); no direct canvas drawing here
     }
     
     updatePerformanceChart(performance) {
@@ -383,11 +473,21 @@ class TradingMonitor {
             }
         });
         
-        // Click to refresh areas
+        // Click to refresh areas (click on header or its children)
         document.addEventListener('click', (event) => {
-            if (event.target.classList.contains('panel-header')) {
+            const header = event.target.closest('.panel-header');
+            if (header) {
                 this.forceRefresh();
             }
+        });
+        
+        // Chart toggle buttons
+        this.elements.dailyViewBtn.addEventListener('click', () => {
+            this.switchChartView('daily');
+        });
+        
+        this.elements.monthlyViewBtn.addEventListener('click', () => {
+            this.switchChartView('monthly');
         });
     }
     
@@ -435,6 +535,112 @@ class TradingMonitor {
         } catch (error) {
             console.error('Failed to fetch data:', error);
         }
+    }
+    
+    async switchChartView(viewType) {
+        // Toggle button states
+        this.elements.dailyViewBtn.classList.toggle('active', viewType === 'daily');
+        this.elements.monthlyViewBtn.classList.toggle('active', viewType === 'monthly');
+        
+        // Fetch historical data
+        try {
+            const response = await fetch('/api/portfolio/history');
+            const data = await response.json();
+            
+            let chartData = data;
+            if (viewType === 'monthly') {
+                // Aggregate to monthly data - simple approach
+                chartData = this.aggregateToMonthly(data);
+            } else {
+                // Daily view - show last 30 days only
+                chartData = this.filterLast30Days(data);
+            }
+            
+            this.updateChart(chartData);
+            
+        } catch (error) {
+            console.error('Failed to fetch portfolio history:', error);
+        }
+    }
+    
+    filterLast30Days(data) {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 30);
+        
+        const filtered = { ...data };
+        filtered.dates = [];
+        filtered.portfolio_returns = [];
+        filtered.sp500_returns = [];
+        filtered.ta125_returns = [];
+        filtered.daily_pnl = [];
+        
+        for (let i = 0; i < data.dates.length; i++) {
+            const date = new Date(data.dates[i]);
+            if (date >= cutoff) {
+                filtered.dates.push(data.dates[i]);
+                filtered.portfolio_returns.push(data.portfolio_returns[i]);
+                filtered.sp500_returns.push(data.sp500_returns[i]);
+                filtered.ta125_returns.push(data.ta125_returns[i]);
+                filtered.daily_pnl.push(data.daily_pnl[i]);
+            }
+        }
+        
+        return filtered;
+    }
+    
+    aggregateToMonthly(data) {
+        // Simple monthly aggregation - take last day of each month
+        const monthlyData = { dates: [], portfolio_returns: [], sp500_returns: [], ta125_returns: [], daily_pnl: [] };
+        let currentMonth = null;
+        let monthlyPnL = 0;
+        
+        for (let i = 0; i < data.dates.length; i++) {
+            const date = new Date(data.dates[i]);
+            const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
+            
+            if (currentMonth !== monthKey) {
+                if (currentMonth !== null) {
+                    // Save previous month P&L (ensure alignment even if 0)
+                    monthlyData.daily_pnl.push(monthlyPnL);
+                }
+                currentMonth = monthKey;
+                monthlyPnL = 0;
+                
+                // Add new month
+                monthlyData.dates.push(date.toISOString().substring(0, 7)); // YYYY-MM
+                monthlyData.portfolio_returns.push(data.portfolio_returns[i]);
+                monthlyData.sp500_returns.push(data.sp500_returns[i]);
+                monthlyData.ta125_returns.push(data.ta125_returns[i]);
+            } else {
+                // Update current month values with latest seen values
+                const idx = monthlyData.dates.length - 1;
+                monthlyData.portfolio_returns[idx] = data.portfolio_returns[i];
+                monthlyData.sp500_returns[idx] = data.sp500_returns[i];
+                monthlyData.ta125_returns[idx] = data.ta125_returns[i];
+            }
+            
+            monthlyPnL += data.daily_pnl[i];
+        }
+        
+        // Always push the last month, even if monthlyPnL is 0
+        if (currentMonth !== null) {
+            monthlyData.daily_pnl.push(monthlyPnL);
+        }
+        
+        return monthlyData;
+    }
+    
+    updateChart(data) {
+        if (!this.chart) return;
+        
+        this.chart.data.labels = data.dates;
+        this.chart.data.datasets[0].data = data.portfolio_returns;
+        this.chart.data.datasets[1].data = data.sp500_returns;
+        this.chart.data.datasets[2].data = data.ta125_returns;
+        this.chart.data.datasets[3].data = data.daily_pnl;
+        
+        this.chart.update();
+        console.log('Chart updated with', data.dates.length, 'data points');
     }
 }
 

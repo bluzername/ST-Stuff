@@ -44,7 +44,7 @@ class ClientPortalConnection:
     and account management through HTTP requests.
     """
     
-    def __init__(self, config_path: str = "cp_config.yaml"):
+    def __init__(self, config_path: str = "cp_config.yaml", dump_http: bool = False):
         """Initialize connection with configuration"""
         self.config_path = Path(config_path)
         self.config = self._load_config()
@@ -59,6 +59,7 @@ class ClientPortalConnection:
         
         # Setup HTTP session
         self.session = self._create_session()
+        self.dump_http = dump_http
         
         # Connection state
         self.authenticated = False
@@ -113,6 +114,25 @@ class ClientPortalConnection:
             logger.addHandler(handler)
         
         return logger
+
+    def get_session_debug_info(self) -> Dict[str, Any]:
+        """Return diagnostic information about current HTTP session/config."""
+        try:
+            headers = dict(self.session.headers)
+        except Exception:
+            headers = {}
+        return {
+            'base_url': self.base_url,
+            'verify_ssl': self.session.verify,
+            'cert_configured': bool(self.cp_config['ssl'].get('cert_file')),
+            'key_configured': bool(self.cp_config['ssl'].get('key_file')),
+            'has_CST_header': bool(headers.get('X-IBKR-CST') or headers.get('x-ibkr-cst')),
+            'has_Secured_header': bool(headers.get('X-IBKR-Secured') or headers.get('x-ibkr-secured')),
+            'timeout_connect': self.cp_config['timeouts']['connect'],
+            'timeout_read': self.cp_config['timeouts']['read'],
+            'retry_max_attempts': self.cp_config['retry']['max_attempts'],
+            'retry_backoff_factor': self.cp_config['retry']['backoff_factor'],
+        }
     
     def _request(self, method: str, endpoint: str, **kwargs) -> Dict[str, Any]:
         """
@@ -129,7 +149,7 @@ class ClientPortalConnection:
         Raises:
             ClientPortalError: On API errors or connection failures
         """
-        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+        url = f"{self.base_url.rstrip('/')}/{endpoint.lstrip('/')}"
         
         # Apply timeouts from config
         kwargs.setdefault('timeout', (
@@ -141,15 +161,65 @@ class ClientPortalConnection:
         
         for attempt in range(retry_config['max_attempts']):
             try:
-                self.logger.debug(f"API Request: {method} {url}")
+                verified = self.session.verify
+                self.logger.debug(f"API Request: {method} {url} (verify_ssl={verified})")
+                # Shallow header snapshot for debugging
+                try:
+                    dbg_headers = {k: ('<present>' if k.lower().startswith('x-ibkr') else v)
+                                   for k, v in self.session.headers.items()}
+                    self.logger.debug(f"Session headers pre-request: {dbg_headers}")
+                except Exception:
+                    pass
+
+                # Dump request details if enabled
+                if self.dump_http:
+                    try:
+                        if 'params' in kwargs and kwargs['params']:
+                            self.logger.debug(f"Request params: {kwargs['params']}")
+                        if 'json' in kwargs and kwargs['json'] is not None:
+                            payload = kwargs['json']
+                            payload_str = json.dumps(payload) if not isinstance(payload, str) else payload
+                            if len(payload_str) > 2000:
+                                payload_str = payload_str[:2000] + '...<truncated>'
+                            self.logger.debug(f"Request json: {payload_str}")
+                    except Exception as e:
+                        self.logger.debug(f"Failed to dump request: {e}")
                 
                 response = self.session.request(method, url, **kwargs)
                 
-                self.logger.debug(f"API Response: {response.status_code}")
+                self.logger.debug(f"API Response: {response.status_code} {response.reason}")
                 
                 # Handle different response codes
+                # Capture session tokens returned by CP Gateway and persist them
+                try:
+                    cst = response.headers.get('X-IBKR-CST') or response.headers.get('x-ibkr-cst')
+                    sec = response.headers.get('X-IBKR-Secured') or response.headers.get('x-ibkr-secured')
+                    if cst:
+                        self.session.headers['X-IBKR-CST'] = cst
+                    if sec:
+                        self.session.headers['X-IBKR-Secured'] = sec
+                    self.logger.debug(f"Session tokens updated: CST={'set' if cst else 'none'}, Secured={'set' if sec else 'none'}")
+                except Exception:
+                    pass
+
+                # Dump response details if enabled
+                if self.dump_http:
+                    try:
+                        safe_headers = {k: ('<present>' if k.lower().startswith('x-ibkr') else v)
+                                        for k, v in response.headers.items()}
+                        self.logger.debug(f"Response headers: {safe_headers}")
+                        text = response.text
+                        if len(text) > 2000:
+                            text = text[:2000] + '...<truncated>'
+                        self.logger.debug(f"Response body: {text}")
+                    except Exception as e:
+                        self.logger.debug(f"Failed to dump response: {e}")
+
                 if response.status_code == 200:
-                    return response.json()
+                    try:
+                        return response.json()
+                    except ValueError:
+                        return {}
                 elif response.status_code == 401:
                     self.authenticated = False
                     raise ClientPortalError("Authentication required")
@@ -179,24 +249,51 @@ class ClientPortalConnection:
                 time.sleep(delay)
         
         raise ClientPortalError(f"Request failed after {retry_config['max_attempts']} attempts")
+
+    def sso_validate(self) -> bool:
+        """Attempt to elevate current API session using existing SSO login.
+
+        Safe, non-interactive. Does not prompt user. Intended to bridge the
+        browser SSO login to the API session so that subsequent calls carry
+        authentication tokens (X-IBKR-CST, X-IBKR-Secured).
+        """
+        try:
+            self.logger.info("Performing SSO validation for API session")
+            _ = self._request('GET', 'sso/validate')
+        except Exception as e:
+            self.logger.debug(f"sso/validate call failed or unavailable: {e}")
+
+        # Re-check auth status
+        try:
+            status = self._request('GET', 'iserver/auth/status')
+            self.authenticated = bool(status.get('authenticated', False))
+            if self.authenticated:
+                self.logger.info("Authenticated after SSO validation")
+            else:
+                self.logger.info("SSO validation did not authenticate API session")
+            return self.authenticated
+        except Exception as e:
+            self.logger.debug(f"Auth status check after SSO validation failed: {e}")
+            return False
     
     def check_connection(self) -> bool:
         """Test if Client Portal Gateway is accessible"""
         try:
             # Try the tickle endpoint first
             response = self._request('GET', 'tickle')
-            if response.get('tickle') or str(response.get('tickle')).lower() == 'true':
-                return True
-                
-            # Fallback to auth status
+            if isinstance(response, dict):
+                if response.get('tickle') is True or str(response.get('tickle', '')).lower() in ['true', '1', 'yes']:
+                    return True
+            # Also accept empty or minimal responses as gateway up
+            # Then fallback to auth status
             response = self._request('GET', 'iserver/auth/status')
-            return 'authenticated' in response
-            
+            return isinstance(response, dict)
+        
         except Exception as e:
             self.logger.error(f"Connection check failed: {e}")
             return False
     
-    def authenticate(self) -> bool:
+    def authenticate(self, allow_reauth: bool = False) -> bool:
         """
         Check authentication status and authenticate if needed
         
@@ -204,20 +301,42 @@ class ClientPortalConnection:
             True if authenticated, False otherwise
         """
         try:
-            # Check current auth status
+            # 1) Check current auth status
             status = self._request('GET', 'iserver/auth/status')
-            
-            self.authenticated = status.get('authenticated', False)
-            
+            self.authenticated = bool(status.get('authenticated', False))
+
             if self.authenticated:
                 self.logger.info("Already authenticated with Client Portal")
                 return True
-            
-            # If not authenticated, we can't do much automatically
-            # User needs to authenticate through the Client Portal web interface
-            self.logger.error("Not authenticated - please authenticate through Client Portal web interface")
+
+            # 2) Always attempt SSO validation (non-interactive)
+            if self.sso_validate():
+                return True
+
+            if allow_reauth:
+                # 3) Trigger reauthentication flow and poll for a short time (interactive)
+                self.logger.info("Triggering reauthentication flow via API and polling for login...")
+                try:
+                    _ = self._request('POST', 'iserver/reauthenticate')
+                except Exception as e:
+                    self.logger.debug(f"reauthenticate call returned: {e}")
+
+                deadline = time.time() + 30
+                while time.time() < deadline:
+                    try:
+                        status3 = self._request('GET', 'iserver/auth/status')
+                        self.authenticated = bool(status3.get('authenticated', False))
+                        if self.authenticated:
+                            self.logger.info("Authenticated after reauthenticate + poll")
+                            return True
+                    except Exception as e:
+                        self.logger.debug(f"Polling auth status failed: {e}")
+                    time.sleep(2)
+
+            # Still not authenticated
+            self.logger.error("Not authenticated - please login via https://localhost:5000 and retry")
             return False
-            
+        
         except Exception as e:
             self.logger.error(f"Authentication check failed: {e}")
             return False
@@ -459,42 +578,74 @@ class ClientPortalConnection:
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description="Test Client Portal Connection")
+    parser = argparse.ArgumentParser(description="Test Client Portal Connection (uber-verbose)")
     parser.add_argument('--config', default='cp_config.yaml', help='Config file path')
     parser.add_argument('--test-order', action='store_true', help='Place test order')
+    parser.add_argument('--verbose', action='store_true', help='Enable DEBUG logs and detailed diagnostics')
+    parser.add_argument('--dump-http', action='store_true', help='Dump HTTP requests/responses (sanitized, truncated)')
     args = parser.parse_args()
     
     # Setup logging to console
-    logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+    console_level = logging.DEBUG if args.verbose else logging.INFO
+    logging.basicConfig(level=console_level, format='%(levelname)s: %(message)s')
     
-    cp = ClientPortalConnection(args.config)
+    cp = ClientPortalConnection(args.config, dump_http=args.dump_http)
+    if args.verbose:
+        # Force logger to DEBUG and add console handler explicitly
+        cp.logger.setLevel(logging.DEBUG)
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.DEBUG)
+        ch.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+        cp.logger.addHandler(ch)
     
-    print("=== Client Portal Connection Test ===")
+    print("\n=== Client Portal Connection Test (Verbose) ===")
+    # Dump config and session info
+    try:
+        cfg = cp.config['client_portal']
+        print("[CONFIG] host=", cfg.get('host'), "port=", cfg.get('port'))
+        print("[CONFIG] base_url=", cp.base_url)
+        print("[CONFIG] ssl.verify=", cfg['ssl'].get('verify'))
+        print("[CONFIG] timeouts(connect,read)=", cfg['timeouts'].get('connect'), cfg['timeouts'].get('read'))
+    except Exception as e:
+        print("[CONFIG] Error reading config:", e)
+    
+    info = cp.get_session_debug_info()
+    print("[SESSION]", json.dumps(info, indent=2))
     
     # Test connection
+    print("\n[CHECK] /tickle and /iserver/auth/status reachability")
     if cp.check_connection():
-        print("✓ Client Portal is accessible")
+        print("✓ Gateway reachable")
     else:
-        print("✗ Client Portal is not accessible")
+        print("✗ Gateway not reachable (tickle/auth status failed)")
         exit(1)
     
     # Test authentication
-    if cp.authenticate():
-        print("✓ Authentication successful")
+    print("\n[AUTH] Checking authentication WITHOUT reauth...")
+    if cp.authenticate(allow_reauth=False):
+        print("✓ Authenticated (iserver/auth/status) - session is valid")
     else:
-        print("✗ Authentication failed")
+        print("✗ Not authenticated (iserver/auth/status returned false or error)")
+        print("[HINT] Ensure you logged in via the SAME host in your browser as base_url uses.")
+        print("       Example: If base_url is https://localhost:5000, login at https://localhost:5000, not 127.0.0.1")
+        print("       Also ensure the gateway is on the same machine or use SSH tunneling.")
+        print("[DEBUG] Trying session initialization...")
+        if cp.initialize_session():
+            print("✓ Session initialized successfully")
+        else:
+            print("✗ Session initialization failed")
         exit(1)
     
     # Get accounts
     accounts = cp.get_accounts()
-    print(f"✓ Available accounts: {accounts}")
+    print(f"\n[ACCOUNTS] Available accounts: {accounts}")
     
     # Test contract resolution
     conid = cp.get_contract_id('AAPL')
     if conid:
-        print(f"✓ AAPL contract ID: {conid}")
+        print(f"[SECDEF] ✓ AAPL contract ID: {conid}")
     else:
-        print("✗ Failed to resolve AAPL contract")
+        print("[SECDEF] ✗ Failed to resolve AAPL contract")
     
     # Test order placement if requested
     if args.test_order:
@@ -520,4 +671,4 @@ if __name__ == "__main__":
             print(f"✗ Test order failed: {e}")
     
     cp.disconnect()
-    print("=== Test completed ===")
+    print("\n=== Test completed ===")

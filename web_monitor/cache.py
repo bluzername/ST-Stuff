@@ -53,6 +53,13 @@ class LRUCache:
         with self.lock:
             self.cache.pop(key, None)
     
+    def invalidate_prefix(self, prefix: str) -> None:
+        """Invalidate all keys that start with the given prefix"""
+        with self.lock:
+            keys_to_delete = [k for k in list(self.cache.keys()) if str(k).startswith(prefix)]
+            for k in keys_to_delete:
+                self.cache.pop(k, None)
+    
     def clear(self) -> None:
         with self.lock:
             self.cache.clear()
@@ -92,8 +99,12 @@ class FileWatchHandler(FileSystemEventHandler):
             'chatgpt_portfolio_update.csv',
             'chatgpt_trade_log.csv', 
             'ib_execution_log.csv',
+            'cp_execution_log.csv',
             'ib_executor.log',
-            '.ib_checkpoint.json'
+            'cp_api.log',
+            'cp_errors.log',
+            '.ib_checkpoint.json',
+            '.cp_checkpoint.json'
         ]
         return file_path.name in watch_patterns
     
@@ -118,8 +129,16 @@ class FileWatchHandler(FileSystemEventHandler):
                 for file_path in self.pending_updates:
                     self.cache_manager.invalidate_file(file_path)
                 
-                # Notify WebSocket clients
-                asyncio.create_task(self.cache_manager.notify_clients())
+                # Notify WebSocket clients - thread-safe notification
+                try:
+                    # Try to get the running event loop
+                    loop = asyncio.get_running_loop()
+                    # Schedule the notification on the main event loop thread
+                    loop.call_soon_threadsafe(lambda: asyncio.create_task(self.cache_manager.notify_clients()))
+                except RuntimeError:
+                    # No event loop running, skip notifications
+                    # This happens during startup before the web server is ready
+                    pass
                 
                 self.pending_updates.clear()
 
@@ -180,23 +199,34 @@ class CacheManager:
         # Invalidate based on file type
         if 'portfolio_update' in file_path.name:
             self.cache.invalidate('current_portfolio')
+            self.cache.invalidate('portfolio_history')
+            self.cache.invalidate('performance_metrics')
+            self.cache.invalidate('system_status')
             logger.debug(f"Invalidated portfolio cache due to {file_path}")
         
         elif 'trade_log' in file_path.name:
             self.cache.invalidate('pending_trades')
+            self.cache.invalidate('system_status')
             logger.debug(f"Invalidated trades cache due to {file_path}")
         
         elif 'execution_log' in file_path.name:
-            self.cache.invalidate('execution_history')
+            # Invalidate all variations by days (execution_history_*) and dependent metrics
+            self.cache.invalidate_prefix('execution_history_')
             self.cache.invalidate('performance_metrics')
+            self.cache.invalidate('system_status')
             logger.debug(f"Invalidated execution cache due to {file_path}")
         
         elif 'ib_executor.log' in file_path.name:
-            self.cache.invalidate('recent_logs')
+            self.cache.invalidate_prefix('recent_logs_')
             self.cache.invalidate('system_status')
             logger.debug(f"Invalidated logs cache due to {file_path}")
-        
-        elif '.ib_checkpoint.json' in file_path.name:
+
+        elif 'cp_api.log' in file_path.name or 'cp_errors.log' in file_path.name:
+            self.cache.invalidate_prefix('recent_logs_')
+            self.cache.invalidate('system_status')
+            logger.debug(f"Invalidated CP logs cache due to {file_path}")
+
+        elif '.ib_checkpoint.json' in file_path.name or '.cp_checkpoint.json' in file_path.name:
             self.cache.invalidate('pending_trades')
             self.cache.invalidate('system_status')
             logger.debug(f"Invalidated checkpoint cache due to {file_path}")

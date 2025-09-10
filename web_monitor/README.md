@@ -122,7 +122,7 @@ The monitor watches these files for changes:
 - `chatgpt_trade_log.csv` - Trading signals  
 - `ib_execution_log.csv` - Actual executions
 - `ib_executor.log` - System logs
-- `.ib_checkpoint.json` - Processing state
+- `.ib_checkpoint.json` / `.cp_checkpoint.json` - Processing state
 
 ### Performance Stats
 

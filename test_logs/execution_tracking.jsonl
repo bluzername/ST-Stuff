@@ -1,0 +1,10 @@
+{"execution_id": "exec_20250910_063859_992524", "status": "STARTED", "timestamp": "2025-09-10T06:38:59.992987", "duration_ms": null, "result": null, "error": null}
+{"execution_id": "exec_20250910_063859_992524", "status": "COMPLETED", "timestamp": "2025-09-10T06:39:00.093568", "duration_ms": 100.5, "result": {"positions_loaded": 5, "cash_balance": 9500.0}, "error": null}
+{"execution_id": "exec_20250910_063900_094307", "status": "STARTED", "timestamp": "2025-09-10T06:39:00.094664", "duration_ms": null, "result": null, "error": null}
+{"execution_id": "exec_20250910_063900_094307", "status": "COMPLETED", "timestamp": "2025-09-10T06:39:00.150784", "duration_ms": 50.2, "result": {"updates_processed": 3, "csv_saved": true}, "error": null}
+{"execution_id": "exec_20250910_063900_151434", "status": "STARTED", "timestamp": "2025-09-10T06:39:00.151725", "duration_ms": null, "result": null, "error": null}
+{"execution_id": "exec_20250910_063900_151434", "status": "COMPLETED", "timestamp": "2025-09-10T06:39:00.172061", "duration_ms": 20.1, "result": {"executed": true, "fill_price": 150.1}, "error": null}
+{"execution_id": "exec_20250910_063900_191283", "status": "STARTED", "timestamp": "2025-09-10T06:39:00.195607", "duration_ms": null, "result": null, "error": null}
+{"execution_id": "exec_20250910_063900_191283", "status": "COMPLETED", "timestamp": "2025-09-10T06:39:00.297098", "duration_ms": 100.0, "result": {"data_points": 252, "success": true}, "error": null}
+{"execution_id": "exec_20250910_063900_297815", "status": "STARTED", "timestamp": "2025-09-10T06:39:00.298180", "duration_ms": null, "result": null, "error": null}
+{"execution_id": "exec_20250910_063900_297815", "status": "FAILED", "timestamp": "2025-09-10T06:39:00.356324", "duration_ms": 50.0, "result": null, "error": "Connection timeout after 30 seconds"}

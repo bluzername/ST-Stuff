@@ -6,15 +6,20 @@ server:
 monitoring:
   data_directories:
     - "../Scripts and CSV Files"
-    - "../Start Your Own"
+    - "../Start Your Own" 
     - "../ib_trading"
+    - ".."  # Root directory where trading_script.py now writes files
   
   files_to_watch:
     - "chatgpt_portfolio_update.csv"
     - "chatgpt_trade_log.csv"
     - "ib_execution_log.csv"
     - "ib_executor.log"
+    - "cp_execution_log.csv"
+    - "cp_api.log"
+    - "cp_errors.log"
     - ".ib_checkpoint.json"
+    - ".cp_checkpoint.json"
   
   cache_size: 1000
   update_interval: 0.1  # 100ms debouncing

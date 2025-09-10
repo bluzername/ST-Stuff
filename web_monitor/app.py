@@ -61,7 +61,7 @@ class TradingMonitorApp:
             logger.error(f"Failed to load config: {e}")
             # Default config for global access
             return {
-                'server': {'host': '0.0.0.0', 'port': 8888, 'reload': False},
+                'server': {'host': '0.0.0.0', 'port': 8889, 'reload': False},
                 'monitoring': {
                     'data_directories': ['../Scripts and CSV Files', '../Start Your Own', '../ib_trading'],
                     'cache_size': 1000,
@@ -129,6 +129,14 @@ class TradingMonitorApp:
                 return self.monitor.get_performance_metrics()
             
             return self.cache_manager.get_cached_or_compute('performance_metrics', compute_metrics, 60)
+        
+        @self.app.get("/api/portfolio/history")
+        async def get_portfolio_history():
+            """Get historical portfolio data for charts"""
+            def compute_history():
+                return self.monitor.get_portfolio_history()
+            
+            return self.cache_manager.get_cached_or_compute('portfolio_history', compute_history, 300)
         
         @self.app.get("/api/logs")
         async def get_recent_logs(max_lines: int = 100):
