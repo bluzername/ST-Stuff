@@ -1,4 +1,4 @@
-ib_async==0.9.86
+ib_async==1.0.3
 pandas>=2.0.0
 pyyaml>=6.0
 click>=8.0

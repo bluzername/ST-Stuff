@@ -9,6 +9,7 @@ Author: Someone who believes REST should be RESTful
 """
 
 import requests
+import socket
 import yaml
 import json
 import time
@@ -183,14 +184,38 @@ class ClientPortalConnection:
     def check_connection(self) -> bool:
         """Test if Client Portal Gateway is accessible"""
         try:
-            # Try the tickle endpoint first
-            response = self._request('GET', 'tickle')
-            if response.get('tickle') or str(response.get('tickle')).lower() == 'true':
-                return True
-                
-            # Fallback to auth status
-            response = self._request('GET', 'iserver/auth/status')
-            return 'authenticated' in response
+            # Fast TCP check to avoid long HTTP timeouts when gateway is down
+            host = self.cp_config.get('host', 'localhost')
+            port = int(self.cp_config.get('port', 5000))
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(0.75)
+                try:
+                    sock.connect((host, port))
+                except Exception:
+                    # Not listening → quickly report not connected
+                    return False
+
+            # Quick probe of the tickle endpoint with short timeouts and no retries
+            url = f"{self.base_url}/tickle"
+            try:
+                resp = self.session.get(url, timeout=(0.5, 0.5))
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get('tickle') or str(data.get('tickle')).lower() == 'true':
+                        return True
+            except Exception:
+                # If a service is listening but not IB, treat as not connected
+                return False
+
+            # Fallback to auth status via short probe
+            try:
+                url = f"{self.base_url}/iserver/auth/status"
+                resp = self.session.get(url, timeout=(0.5, 0.5))
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return bool(data.get('authenticated'))
+            except Exception:
+                return False
             
         except Exception as e:
             self.logger.error(f"Connection check failed: {e}")
@@ -296,6 +321,11 @@ class ClientPortalConnection:
         price = float(order_data.get('price', 0))
         order_type = order_data.get('order_type', 'LMT').upper()
         
+        # Basic ticker sanity (letters only, 1-5 chars)
+        if not ticker or not ticker.isalpha() or not (1 <= len(ticker) <= 5):
+            self.logger.error(f"Order rejected: invalid ticker '{ticker}'")
+            return False
+
         # Check forbidden tickers
         if ticker in self.safety_config['forbidden_tickers']:
             self.logger.error(f"Order rejected: {ticker} is forbidden")
@@ -312,7 +342,7 @@ class ClientPortalConnection:
             return False
         
         # Check price
-        if price < self.safety_config['min_price'] or price > self.safety_config['max_price']:
+        if price <= self.safety_config['min_price'] or price > self.safety_config['max_price']:
             self.logger.error(f"Order rejected: price {price} outside limits")
             return False
         

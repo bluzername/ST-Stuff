@@ -1,0 +1,1 @@
+execution_date,execution_time,ib_order_id,ib_perm_id,ticker,action,quantity,order_type,limit_price,executed_price,commission,total_cost,status,csv_source,csv_row_date,csv_row_index,slippage,notes

@@ -76,6 +76,109 @@ DEFAULT_BENCHMARKS = ["IWO", "XBI", "SPY", "IWM"]
 
 logger = logging.getLogger(__name__)
 
+# ------------------------------
+# Backtest realism configuration
+# ------------------------------
+
+@dataclass
+class BacktestConfig:
+    """Config for backtest realism.
+
+    Defaults keep legacy behavior (no costs/slippage/volume cap).
+
+    - slippage_bps: applied to execution price (buy worse, sell worse).
+    - commission_per_share: per-share fee for executions.
+    - min_commission: minimum commission per order.
+    - max_participation_rate: cap shares by fraction of daily volume.
+    - tick_size: price rounding increment for fills.
+    """
+    slippage_bps: float = 0.0
+    commission_per_share: float = 0.0
+    min_commission: float = 0.0
+    max_participation_rate: float = 1.0
+    tick_size: float = 0.01
+
+
+# Global backtest config; adjust via set_backtest_config() if desired
+BACKTEST = BacktestConfig()
+
+
+def set_backtest_config(
+    *,
+    slippage_bps: float | None = None,
+    commission_per_share: float | None = None,
+    min_commission: float | None = None,
+    max_participation_rate: float | None = None,
+    tick_size: float | None = None,
+) -> None:
+    """Update global backtest realism settings (opt-in)."""
+    global BACKTEST
+    if slippage_bps is not None:
+        BACKTEST.slippage_bps = float(slippage_bps)
+    if commission_per_share is not None:
+        BACKTEST.commission_per_share = float(commission_per_share)
+    if min_commission is not None:
+        BACKTEST.min_commission = float(min_commission)
+    if max_participation_rate is not None:
+        BACKTEST.max_participation_rate = float(max_participation_rate)
+    if tick_size is not None:
+        BACKTEST.tick_size = float(tick_size)
+
+
+def _round_to_tick(price: float) -> float:
+    step = max(1e-6, BACKTEST.tick_size)
+    return round(round(price / step) * step, 6)
+
+
+def _apply_slippage(price: float, side: str) -> float:
+    """Apply slippage in basis points; buy gets worse (higher), sell worse (lower)."""
+    bps = BACKTEST.slippage_bps or 0.0
+    if bps <= 0:
+        return _round_to_tick(price)
+    mult = (1.0 + bps / 10_000.0) if side.lower().startswith("b") else (1.0 - bps / 10_000.0)
+    return _round_to_tick(price * mult)
+
+
+def _calc_commission(shares: float) -> float:
+    if shares <= 0:
+        return 0.0
+    per = BACKTEST.commission_per_share or 0.0
+    base = shares * per
+    minc = BACKTEST.min_commission or 0.0
+    return max(minc, base) if (per > 0 or minc > 0) else 0.0
+
+
+def _cap_by_volume(requested_shares: float, day_volume: float | None) -> float:
+    """Cap requested shares by max participation of daily volume."""
+    rate = BACKTEST.max_participation_rate or 1.0
+    if requested_shares <= 0:
+        return 0.0
+    if rate >= 1.0 or day_volume is None or np.isnan(day_volume):
+        return float(requested_shares)
+    cap = max(0, int(day_volume * rate))
+    return float(min(int(requested_shares), cap))
+
+
+def _cap_by_cash_for_buy(cash: float, exec_price: float, requested_shares: float) -> float:
+    """Limit shares by available cash, accounting for commissions.
+
+    Approximates n*(price + commission_per_share) + min_commission <= cash.
+    """
+    if requested_shares <= 0:
+        return 0.0
+    price = max(0.0, float(exec_price))
+    cps = BACKTEST.commission_per_share or 0.0
+    minc = BACKTEST.min_commission or 0.0
+    if price <= 0:
+        return 0.0
+    if cps == 0.0 and minc == 0.0:
+        return float(min(int(cash // price), int(requested_shares)))
+    if cash <= minc:
+        return 0.0
+    # conservative: allocate min commission once
+    affordable = int((cash - minc) // (price + cps))
+    return float(min(int(requested_shares), max(0, affordable)))
+
 def _read_json_file(path: Path) -> Optional[Dict]:
     """Read and parse JSON from `path`. Return dict on success, None if not found or invalid.
 
@@ -442,20 +545,38 @@ Would you like to log a manual trade? Enter 'b' for buy, 's' for sell, or press 
                         continue
 
                     o = float(data["Open"].iloc[-1]) if "Open" in data else float(data["Close"].iloc[-1])
-                    exec_price = round(o, 2)
-                    notional = exec_price * shares
-                    if notional > cash:
-                        print(f"MOO buy for {ticker} failed: cost {notional:.2f} exceeds cash {cash:.2f}.")
+                    vol = float(data["Volume"].iloc[-1]) if "Volume" in data else np.nan
+                    px_sl = _apply_slippage(o, "buy")
+
+                    # Cap by daily volume and by available cash
+                    req = float(shares)
+                    cap_vol = _cap_by_volume(req, vol)
+                    cap_cash = _cap_by_cash_for_buy(cash, px_sl, cap_vol)
+                    filled = int(cap_cash)
+                    if filled <= 0:
+                        print(
+                            f"MOO buy for {ticker} failed: not enough cash or volume to fill any shares at ${px_sl:.2f}."
+                        )
+                        continue
+
+                    fees = _calc_commission(filled)
+                    notional = px_sl * filled
+                    total_cost = notional + fees
+                    if total_cost > cash + 1e-9:  # sanity check
+                        print(
+                            f"MOO buy for {ticker} failed: total cost {total_cost:.2f} exceeds cash {cash:.2f}."
+                        )
                         continue
 
                     log = {
                         "Date": today_iso,
                         "Ticker": ticker,
-                        "Shares Bought": shares,
-                        "Buy Price": exec_price,
+                        "Shares Bought": float(filled),
+                        "Buy Price": px_sl,
                         "Cost Basis": notional,
                         "PnL": 0.0,
                         "Reason": "MANUAL BUY MOO - Filled",
+                        "Commission": fees,
                     }
                     # --- Manual BUY MOO logging ---
                     if os.path.exists(TRADE_LOG_CSV):
@@ -472,9 +593,9 @@ Would you like to log a manual trade? Enter 'b' for buy, 's' for sell, or press 
                     if rows.empty:
                         new_trade = {
                             "ticker": ticker,
-                            "shares": float(shares),
+                            "shares": float(filled),
                             "stop_loss": float(stop_loss),
-                            "buy_price": float(exec_price),
+                            "buy_price": float(px_sl),
                             "cost_basis": float(notional),
                         }
                         if portfolio_df.empty:
@@ -485,7 +606,7 @@ Would you like to log a manual trade? Enter 'b' for buy, 's' for sell, or press 
                         idx = rows.index[0]
                         cur_shares = float(portfolio_df.at[idx, "shares"])
                         cur_cost = float(portfolio_df.at[idx, "cost_basis"])
-                        new_shares = cur_shares + float(shares)
+                        new_shares = cur_shares + float(filled)
                         new_cost = cur_cost + float(notional)
                         avg_price = new_cost / new_shares if new_shares else 0.0
                         portfolio_df.at[idx, "shares"] = new_shares
@@ -493,8 +614,9 @@ Would you like to log a manual trade? Enter 'b' for buy, 's' for sell, or press 
                         portfolio_df.at[idx, "buy_price"] = avg_price
                         portfolio_df.at[idx, "stop_loss"] = float(stop_loss)
 
-                    cash -= notional
-                    print(f"Manual BUY MOO for {ticker} filled at ${exec_price:.2f} ({fetch.source}).")
+                    cash -= total_cost
+                    note = " (partial)" if filled < req else ""
+                    print(f"Manual BUY MOO for {ticker} filled{note} at ${px_sl:.2f} ({fetch.source}).")
                     continue
 
                 elif order_type == "l":
@@ -564,12 +686,15 @@ Would you like to log a manual trade? Enter 'b' for buy, 's' for sell, or press 
             o = c
 
         if stop and l <= stop:
-            exec_price = round(o if o <= stop else stop, 2)
+            # Stop market: gap through stop fills at/near open; intraday touch fills near stop
+            raw_px = o if o <= stop else stop
+            exec_price = _apply_slippage(raw_px, "sell")
             value = round(exec_price * shares, 2)
-            pnl = round((exec_price - cost) * shares, 2)
+            fees = _calc_commission(shares)
+            pnl = round((exec_price - cost) * shares - fees, 2)
             action = "SELL - Stop Loss Triggered"
-            cash += value
-            portfolio_df = log_sell(ticker, shares, exec_price, cost, pnl, portfolio_df)
+            cash += (value - fees)
+            portfolio_df = log_sell(ticker, shares, exec_price, cost, pnl, portfolio_df, commission=fees)
             row = {
                 "Date": today_iso, "Ticker": ticker, "Shares": shares,
                 "Buy Price": cost, "Cost Basis": cost_basis, "Stop Loss": stop,
@@ -624,6 +749,8 @@ def log_sell(
     cost: float,
     pnl: float,
     portfolio: pd.DataFrame,
+    *,
+    commission: float = 0.0,
 ) -> pd.DataFrame:
     today = check_weekend()
     log = {
@@ -635,6 +762,8 @@ def log_sell(
         "PnL": pnl,
         "Reason": "AUTOMATED SELL - STOPLOSS TRIGGERED",
     }
+    if commission and commission > 0:
+        log["Commission"] = commission
     print(f"{ticker} stop loss was met. Selling all shares.")
     portfolio = portfolio[portfolio["ticker"] != ticker]
 
@@ -684,30 +813,50 @@ def log_manual_buy(
     o = float(data.get("Open", [np.nan])[-1])
     h = float(data["High"].iloc[-1])
     l = float(data["Low"].iloc[-1])
+    v = float(data.get("Volume", [np.nan])[-1]) if "Volume" in data else np.nan
     if np.isnan(o):
         o = float(data["Close"].iloc[-1])
 
+    # Pre-open gap through limit: execute near open; else intraday touch at limit
     if o <= buy_price:
-        exec_price = o
+        px_raw = o
     elif l <= buy_price:
-        exec_price = buy_price
+        px_raw = buy_price
     else:
         print(f"Buy limit ${buy_price:.2f} for {ticker} not reached today (range {l:.2f}-{h:.2f}). Order not filled.")
         return cash, chatgpt_portfolio
 
-    cost_amt = exec_price * shares
-    if cost_amt > cash:
-        print(f"Manual buy for {ticker} failed: cost {cost_amt:.2f} exceeds cash balance {cash:.2f}.")
+    # Apply slippage but never worse than limit for a limit order
+    px_sl = _apply_slippage(px_raw, "buy")
+    exec_price = min(buy_price, px_sl)
+
+    # Cap shares by daily volume and cash
+    req = float(shares)
+    cap_vol = _cap_by_volume(req, v)
+    cap_cash = _cap_by_cash_for_buy(cash, exec_price, cap_vol)
+    filled = int(cap_cash)
+    if filled <= 0:
+        print(
+            f"Manual buy for {ticker} failed: not enough cash or volume to fill any shares at ${exec_price:.2f}."
+        )
+        return cash, chatgpt_portfolio
+
+    cost_amt = exec_price * filled
+    fees = _calc_commission(filled)
+    total_cost = cost_amt + fees
+    if total_cost > cash + 1e-9:
+        print(f"Manual buy for {ticker} failed: total cost {total_cost:.2f} exceeds cash balance {cash:.2f}.")
         return cash, chatgpt_portfolio
 
     log = {
         "Date": today,
         "Ticker": ticker,
-        "Shares Bought": shares,
+        "Shares Bought": float(filled),
         "Buy Price": exec_price,
         "Cost Basis": cost_amt,
         "PnL": 0.0,
         "Reason": "MANUAL BUY LIMIT - Filled",
+        "Commission": fees,
     }
     if os.path.exists(TRADE_LOG_CSV):
         df = pd.read_csv(TRADE_LOG_CSV)
@@ -744,15 +893,16 @@ def log_manual_buy(
         idx = rows.index[0]
         cur_shares = float(chatgpt_portfolio.at[idx, "shares"])
         cur_cost = float(chatgpt_portfolio.at[idx, "cost_basis"])
-        new_shares = cur_shares + float(shares)
+        new_shares = cur_shares + float(filled)
         new_cost = cur_cost + float(cost_amt)
         chatgpt_portfolio.at[idx, "shares"] = new_shares
         chatgpt_portfolio.at[idx, "cost_basis"] = new_cost
         chatgpt_portfolio.at[idx, "buy_price"] = new_cost / new_shares if new_shares else 0.0
         chatgpt_portfolio.at[idx, "stop_loss"] = float(stoploss)
 
-    cash -= cost_amt
-    print(f"Manual BUY LIMIT for {ticker} filled at ${exec_price:.2f} ({fetch.source}).")
+    cash -= total_cost
+    note = " (partial)" if filled < req else ""
+    print(f"Manual BUY LIMIT for {ticker} filled{note} at ${exec_price:.2f} ({fetch.source}).")
     return cash, chatgpt_portfolio
 
 def log_manual_sell(
@@ -796,27 +946,41 @@ If this is a mistake, enter 1. """
     o = float(data["Open"].iloc[-1]) if "Open" in data else np.nan
     h = float(data["High"].iloc[-1])
     l = float(data["Low"].iloc[-1])
+    v = float(data.get("Volume", [np.nan])[-1]) if "Volume" in data else np.nan
     if np.isnan(o):
         o = float(data["Close"].iloc[-1])
 
     if o >= sell_price:
-        exec_price = o
+        px_raw = o
     elif h >= sell_price:
-        exec_price = sell_price
+        px_raw = sell_price
     else:
         print(f"Sell limit ${sell_price:.2f} for {ticker} not reached today (range {l:.2f}-{h:.2f}). Order not filled.")
         return cash, chatgpt_portfolio
 
+    # Apply slippage but never worse than limit for a limit sell
+    px_sl = _apply_slippage(px_raw, "sell")
+    exec_price = max(sell_price, px_sl)
+
+    # Cap by daily volume
+    filled = float(min(int(shares_sold), int(_cap_by_volume(shares_sold, v))))
+    if filled <= 0:
+        print(f"Manual sell for {ticker} failed: not enough volume to fill any shares.")
+        return cash, chatgpt_portfolio
+
     buy_price = float(ticker_row["buy_price"].item())
-    cost_basis = buy_price * shares_sold
-    pnl = exec_price * shares_sold - cost_basis
+    cost_basis = buy_price * filled
+    gross_proceeds = exec_price * filled
+    fees = _calc_commission(filled)
+    pnl = gross_proceeds - cost_basis - fees
 
     log = {
         "Date": today, "Ticker": ticker,
         "Shares Bought": "", "Buy Price": "",
         "Cost Basis": cost_basis, "PnL": pnl,
-        "Reason": f"MANUAL SELL LIMIT - {reason}", "Shares Sold": shares_sold,
+        "Reason": f"MANUAL SELL LIMIT - {reason}", "Shares Sold": float(filled),
         "Sell Price": exec_price,
+        "Commission": fees,
     }
     if os.path.exists(TRADE_LOG_CSV):
         df = pd.read_csv(TRADE_LOG_CSV)
@@ -829,17 +993,18 @@ If this is a mistake, enter 1. """
     df.to_csv(TRADE_LOG_CSV, index=False)
 
 
-    if total_shares == shares_sold:
+    if total_shares == filled:
         chatgpt_portfolio = chatgpt_portfolio[chatgpt_portfolio["ticker"] != ticker]
     else:
         row_index = ticker_row.index[0]
-        chatgpt_portfolio.at[row_index, "shares"] = total_shares - shares_sold
+        chatgpt_portfolio.at[row_index, "shares"] = total_shares - filled
         chatgpt_portfolio.at[row_index, "cost_basis"] = (
             chatgpt_portfolio.at[row_index, "shares"] * chatgpt_portfolio.at[row_index, "buy_price"]
         )
 
-    cash += shares_sold * exec_price
-    print(f"Manual SELL LIMIT for {ticker} filled at ${exec_price:.2f} ({fetch.source}).")
+    cash += gross_proceeds - fees
+    note = " (partial)" if filled < shares_sold else ""
+    print(f"Manual SELL LIMIT for {ticker} filled{note} at ${exec_price:.2f} ({fetch.source}).")
     return cash, chatgpt_portfolio
 
 

@@ -1,0 +1,209 @@
+2025-09-11 17:13:23,794 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:13:23,795 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:13:23,795 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:13:23,795 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:13:23,797 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:13:23,797 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:13:23,797 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:13:33,820 - cp_connection - WARNING - Request timeout (attempt 1)
+2025-09-11 17:13:33,820 - cp_connection - INFO - Retrying in 5 seconds...
+2025-09-11 17:13:48,862 - cp_connection - WARNING - Request timeout (attempt 2)
+2025-09-11 17:13:48,864 - cp_connection - INFO - Retrying in 10 seconds...
+2025-09-11 17:14:08,941 - cp_connection - WARNING - Request timeout (attempt 3)
+2025-09-11 17:14:08,944 - cp_connection - ERROR - Connection check failed: Request failed after 3 attempts
+2025-09-11 17:14:08,944 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:14:08,957 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:14:08,957 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:14:08,957 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:14:18,987 - cp_connection - WARNING - Request timeout (attempt 1)
+2025-09-11 17:14:18,988 - cp_connection - INFO - Retrying in 5 seconds...
+2025-09-11 17:14:34,037 - cp_connection - WARNING - Request timeout (attempt 2)
+2025-09-11 17:14:34,038 - cp_connection - INFO - Retrying in 10 seconds...
+2025-09-11 17:14:54,072 - cp_connection - WARNING - Request timeout (attempt 3)
+2025-09-11 17:14:54,073 - cp_connection - ERROR - Connection check failed: Request failed after 3 attempts
+2025-09-11 17:14:54,073 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:14:54,095 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:14:54,095 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:14:54,095 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:15:04,119 - cp_connection - WARNING - Request timeout (attempt 1)
+2025-09-11 17:15:04,120 - cp_connection - INFO - Retrying in 5 seconds...
+2025-09-11 17:15:19,158 - cp_connection - WARNING - Request timeout (attempt 2)
+2025-09-11 17:15:19,159 - cp_connection - INFO - Retrying in 10 seconds...
+2025-09-11 17:16:11,259 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:16:11,259 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:16:11,260 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:16:11,260 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:16:11,261 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:16:11,261 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:16:11,262 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:16:21,284 - cp_connection - WARNING - Request timeout (attempt 1)
+2025-09-11 17:16:21,284 - cp_connection - INFO - Retrying in 5 seconds...
+2025-09-11 17:16:36,322 - cp_connection - WARNING - Request timeout (attempt 2)
+2025-09-11 17:16:36,323 - cp_connection - INFO - Retrying in 10 seconds...
+2025-09-11 17:16:56,361 - cp_connection - WARNING - Request timeout (attempt 3)
+2025-09-11 17:16:56,363 - cp_connection - ERROR - Connection check failed: Request failed after 3 attempts
+2025-09-11 17:16:56,363 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:16:56,377 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:16:56,377 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:16:56,377 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:17:06,405 - cp_connection - WARNING - Request timeout (attempt 1)
+2025-09-11 17:17:06,407 - cp_connection - INFO - Retrying in 5 seconds...
+2025-09-11 17:17:21,450 - cp_connection - WARNING - Request timeout (attempt 2)
+2025-09-11 17:17:21,452 - cp_connection - INFO - Retrying in 10 seconds...
+2025-09-11 17:17:41,489 - cp_connection - WARNING - Request timeout (attempt 3)
+2025-09-11 17:17:41,489 - cp_connection - ERROR - Connection check failed: Request failed after 3 attempts
+2025-09-11 17:17:41,490 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:17:41,520 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:17:41,520 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:17:41,520 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:17:41,544 - cp_connection - WARNING - Connection error (attempt 1)
+2025-09-11 17:17:41,544 - cp_connection - INFO - Retrying in 5 seconds...
+2025-09-11 17:17:56,590 - cp_connection - WARNING - Request timeout (attempt 2)
+2025-09-11 17:17:56,590 - cp_connection - INFO - Retrying in 10 seconds...
+2025-09-11 17:19:16,175 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:19:16,175 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:19:16,175 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:19:16,175 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:19:16,178 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:19:16,178 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:19:16,178 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:19:26,207 - cp_connection - WARNING - Request timeout (attempt 1)
+2025-09-11 17:19:26,207 - cp_connection - INFO - Retrying in 5 seconds...
+2025-09-11 17:19:41,257 - cp_connection - WARNING - Request timeout (attempt 2)
+2025-09-11 17:19:41,258 - cp_connection - INFO - Retrying in 10 seconds...
+2025-09-11 17:20:01,298 - cp_connection - WARNING - Request timeout (attempt 3)
+2025-09-11 17:20:01,298 - cp_connection - ERROR - Connection check failed: Request failed after 3 attempts
+2025-09-11 17:20:01,298 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:20:01,307 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:20:01,307 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:20:01,307 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:20:11,336 - cp_connection - WARNING - Request timeout (attempt 1)
+2025-09-11 17:20:11,337 - cp_connection - INFO - Retrying in 5 seconds...
+2025-09-11 17:20:26,376 - cp_connection - WARNING - Request timeout (attempt 2)
+2025-09-11 17:20:26,377 - cp_connection - INFO - Retrying in 10 seconds...
+2025-09-11 17:20:46,417 - cp_connection - WARNING - Request timeout (attempt 3)
+2025-09-11 17:20:46,418 - cp_connection - ERROR - Connection check failed: Request failed after 3 attempts
+2025-09-11 17:20:46,418 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:20:46,434 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:20:46,434 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:20:46,434 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:20:56,457 - cp_connection - WARNING - Request timeout (attempt 1)
+2025-09-11 17:20:56,459 - cp_connection - INFO - Retrying in 5 seconds...
+2025-09-11 17:21:11,498 - cp_connection - WARNING - Request timeout (attempt 2)
+2025-09-11 17:21:11,500 - cp_connection - INFO - Retrying in 10 seconds...
+2025-09-11 17:21:27,026 - ib_trading.cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:21:27,026 - ib_trading.cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:21:27,026 - ib_trading.cp_connection - INFO - Trading mode: paper
+2025-09-11 17:21:37,050 - ib_trading.cp_connection - WARNING - Request timeout (attempt 1)
+2025-09-11 17:21:37,051 - ib_trading.cp_connection - INFO - Retrying in 5 seconds...
+2025-09-11 17:21:52,083 - ib_trading.cp_connection - WARNING - Request timeout (attempt 2)
+2025-09-11 17:21:52,084 - ib_trading.cp_connection - INFO - Retrying in 10 seconds...
+2025-09-11 17:22:12,121 - ib_trading.cp_connection - WARNING - Request timeout (attempt 3)
+2025-09-11 17:22:12,122 - ib_trading.cp_connection - ERROR - Connection check failed: Request failed after 3 attempts
+2025-09-11 17:22:31,301 - ib_trading.cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:22:31,301 - ib_trading.cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:22:31,301 - ib_trading.cp_connection - INFO - Trading mode: paper
+2025-09-11 17:22:36,676 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:22:36,676 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:22:36,676 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:22:36,676 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:22:36,678 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:22:36,678 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:22:36,679 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:22:37,215 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:22:37,222 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:22:37,222 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:22:37,222 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:22:37,748 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:22:37,754 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:22:37,754 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:22:37,754 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:22:38,281 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:22:38,289 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:22:38,290 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:22:38,290 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:22:38,813 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:22:38,818 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:22:38,818 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:22:38,818 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:22:38,818 - cp_connection - INFO - Order validation passed: BUY 10.0 AAPL @ $150.00
+2025-09-11 17:22:38,818 - cp_connection - ERROR - Order rejected: quantity 100000.0 outside limits
+2025-09-11 17:22:38,818 - cp_connection - INFO - Order validation passed: BUY 10.0 AAPL @ $0.01
+2025-09-11 17:22:38,819 - cp_connection - ERROR - Order rejected: INVALID not allowed
+2025-09-11 17:22:38,819 - cp_connection - INFO - Order validation passed: BUY 10.0 INVALID @ $150.00
+2025-09-11 17:22:38,819 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:22:38,823 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:22:38,823 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:22:38,823 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:22:39,345 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:22:39,365 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:22:39,365 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:22:39,365 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:22:39,370 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:22:39,370 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:22:39,370 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:22:39,378 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:22:39,378 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:22:39,378 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:22:49,405 - cp_connection - WARNING - Request timeout (attempt 1)
+2025-09-11 17:22:49,405 - cp_connection - INFO - Retrying in 5 seconds...
+2025-09-11 17:23:04,443 - cp_connection - WARNING - Request timeout (attempt 2)
+2025-09-11 17:23:04,445 - cp_connection - INFO - Retrying in 10 seconds...
+2025-09-11 17:23:24,472 - cp_connection - WARNING - Request timeout (attempt 3)
+2025-09-11 17:23:24,473 - cp_connection - ERROR - Contract resolution failed for INVALID_TICKER_12345: Request failed after 3 attempts
+2025-09-11 17:23:24,473 - cp_connection - ERROR - Order rejected: INVALID not allowed
+2025-09-11 17:23:24,473 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:23:24,479 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:23:24,479 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:23:24,479 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:23:24,482 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:23:24,482 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:23:24,482 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:23:24,482 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:26:01,052 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:26:01,052 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:26:01,052 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:26:01,052 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:26:01,054 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:26:01,054 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:26:01,054 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:26:01,583 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:26:01,583 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:26:01,583 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:26:02,103 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:26:02,103 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:26:02,103 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:26:02,625 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:26:02,626 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:26:02,626 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:26:03,146 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:26:03,147 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:26:03,147 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:26:03,147 - cp_connection - INFO - Order validation passed: BUY 10.0 AAPL @ $150.00
+2025-09-11 17:26:03,147 - cp_connection - ERROR - Order rejected: quantity 100000.0 outside limits
+2025-09-11 17:26:03,147 - cp_connection - ERROR - Order rejected: price 0.01 outside limits
+2025-09-11 17:26:03,147 - cp_connection - ERROR - Order rejected: INVALID not allowed
+2025-09-11 17:26:03,147 - cp_connection - ERROR - Order rejected: invalid ticker 'INVALID'
+2025-09-11 17:26:03,147 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:26:03,150 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:26:03,150 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:26:03,150 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:26:03,684 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:26:03,684 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:26:03,684 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:26:03,688 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:26:03,688 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:26:03,688 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:26:03,689 - cp_connection - INFO - Order validation passed: BUY 1.0 AAPL @ $150.00
+2025-09-11 17:26:03,694 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:26:03,695 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:26:03,695 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:26:04,214 - cp_connection - ERROR - Order rejected: INVALID not allowed
+2025-09-11 17:26:04,214 - cp_connection - INFO - Client Portal connection closed
+2025-09-11 17:26:04,218 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:26:04,218 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:26:04,218 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:26:04,221 - cp_connection - INFO - Client Portal connection initialized
+2025-09-11 17:26:04,221 - cp_connection - INFO - Base URL: https://localhost:5000/v1/api
+2025-09-11 17:26:04,222 - cp_connection - INFO - Trading mode: paper
+2025-09-11 17:26:04,222 - cp_connection - INFO - Client Portal connection closed

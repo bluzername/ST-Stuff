@@ -18,7 +18,12 @@ class CSVTradeMonitor:
     
     def __init__(self, data_dir: str = "../Start Your Own", checkpoint_file: str = ".ib_checkpoint.json"):
         self.data_dir = Path(data_dir)
-        self.checkpoint_file = Path(checkpoint_file)
+        # Use checkpoint inside data_dir when a bare filename is provided
+        cf = Path(checkpoint_file)
+        if cf.is_absolute() or str(cf.parent) not in (".", ""):
+            self.checkpoint_file = cf
+        else:
+            self.checkpoint_file = self.data_dir / cf.name
         
         # CSV file paths
         self.portfolio_csv = self.data_dir / "chatgpt_portfolio_update.csv"
