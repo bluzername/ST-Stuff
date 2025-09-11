@@ -497,18 +497,26 @@ class ClientPortalConnection:
             response = self._request('POST', f'iserver/account/{self.account_id}/orders', 
                                    json={"orders": [cp_order]})
             
-            # Extract order result
-            if isinstance(response, list) and len(response) > 0:
+            # Extract order result (support list or dict formats)
+            order_response = None
+            if isinstance(response, list) and response:
                 order_response = response[0]
-                
-                return OrderResult(
-                    order_id=str(order_response.get('order_id', order_response.get('orderId', 'unknown'))),
-                    status=order_response.get('order_status', 'unknown'),
-                    message=order_response.get('text', ''),
-                    raw_response=order_response
-                )
-            else:
+            elif isinstance(response, dict):
+                # Some gateways wrap in {'orders': [...]} or return single order fields
+                if isinstance(response.get('orders'), list) and response['orders']:
+                    order_response = response['orders'][0]
+                else:
+                    order_response = response
+
+            if order_response is None:
                 raise ClientPortalError(f"Unexpected order response: {response}")
+
+            return OrderResult(
+                order_id=str(order_response.get('order_id', order_response.get('orderId', 'unknown'))),
+                status=order_response.get('order_status', order_response.get('status', 'unknown')),
+                message=order_response.get('text', ''),
+                raw_response=order_response
+            )
                 
         except Exception as e:
             self.logger.error(f"Order placement failed: {e}")
@@ -517,15 +525,22 @@ class ClientPortalConnection:
     def get_order_status(self, order_id: str) -> Dict[str, Any]:
         """Get order status by order ID"""
         try:
-            orders = self._request('GET', f'iserver/account/{self.account_id}/orders')
-            
-            for order in orders.get('orders', []):
-                if str(order.get('orderId', order.get('order_id', ''))) == str(order_id):
+            orders_resp = self._request('GET', f'iserver/account/{self.account_id}/orders')
+            # Normalize to an iterable of order dicts
+            iterable = []
+            if isinstance(orders_resp, list):
+                iterable = orders_resp
+            elif isinstance(orders_resp, dict):
+                iterable = orders_resp.get('orders', []) or orders_resp.get('data', []) or []
+
+            for order in iterable:
+                oid = order.get('orderId', order.get('order_id', ''))
+                if str(oid) == str(order_id):
                     return order
-            
+
             self.logger.warning(f"Order {order_id} not found")
             return {}
-            
+
         except Exception as e:
             self.logger.error(f"Failed to get order status: {e}")
             return {}

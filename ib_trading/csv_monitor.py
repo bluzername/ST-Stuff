@@ -168,12 +168,16 @@ class CSVTradeMonitor:
             else:
                 self.logger.debug(f"Row {idx} not a trade signal: {reason}")
         
-        # Update checkpoint with highest processed index
-        if trades:
-            max_index = max(trade['csv_index'] for trade in trades)
-            self.checkpoint['last_trade_log_index'] = max_index
+        # Update checkpoint with highest processed index even if no trades were found
+        try:
+            highest_idx = int(df.index.max()) if len(df.index) else -1
+        except Exception:
+            highest_idx = -1
+        new_idx = max(self.checkpoint.get('last_trade_log_index', -1), highest_idx)
+        if new_idx != self.checkpoint.get('last_trade_log_index', -1):
+            self.checkpoint['last_trade_log_index'] = new_idx
             self._save_checkpoint()
-            self.logger.info(f"Updated checkpoint to index {max_index}")
+            self.logger.info(f"Updated checkpoint to index {new_idx}")
         
         self.logger.info(f"Trade log scan complete: processed {processed_rows} rows, skipped {skipped_rows} rows, found {len(trades)} trades")
         return trades
@@ -335,7 +339,15 @@ class CSVTradeMonitor:
         unique_trades = []
         
         for trade in trades:
-            key = (trade['ticker'], trade['action'], trade['csv_date'], trade['quantity'])
+            # Include price and csv_index to avoid collapsing distinct orders with same qty/date
+            key = (
+                str(trade.get('ticker', '')).upper(),
+                str(trade.get('action', '')).upper(),
+                str(trade.get('csv_date', '')),
+                float(trade.get('quantity', 0) or 0),
+                float(trade.get('price', 0) or 0),
+                int(trade.get('csv_index', -1)),
+            )
             if key not in seen:
                 seen.add(key)
                 unique_trades.append(trade)

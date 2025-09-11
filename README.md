@@ -41,8 +41,8 @@ So, starting with just $100, I wanted to answer a simple but powerful question:
 This system consists of **four modules** that work together:
 
 1. **Autopilot Script** (`autopilot.sh`) - **Automated orchestration with time-based scheduling**
-2. **ChatGPT Trading Script** (`trading_script.py`) - Generates CSV trade signals
-3. **Interactive Brokers Module** (`ib_trading/`) - Executes trades automatically  
+2. **ChatGPT Trading Script** (`trading_script.py`) - Generates CSV trade signals (supports full non-interactive mode)
+3. **Interactive Brokers Module** (`ib_trading/`) - Executes trades automatically via Client Portal  
 4. **Web Monitor Interface** (`web_monitor/`) - Real-time pipeline monitoring
 
 **Essential Commands:**
@@ -53,8 +53,9 @@ This system consists of **four modules** that work together:
 ./autopilot.sh stop     # Graceful shutdown
 
 # MANUAL: Individual components
-# 1. Generate trade signals with ChatGPT
-python trading_script.py --file "Start Your Own/chatgpt_portfolio_update.csv"
+# 1. Generate trade signals with ChatGPT (non-interactive)
+python trading_script.py --file "Start Your Own/chatgpt_portfolio_update.csv" \
+  --no-interactive --starting-cash 10000
 
 # 2. Execute trades automatically (dry-run first!)
 cd ib_trading
@@ -95,15 +96,11 @@ python app.py
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# Install dependencies
+# Install dependencies (root covers Client Portal deps)
 pip install -r requirements.txt
 
-# Additional Client Portal module dependencies
-cd ib_trading
-pip install requests pyyaml websockets
-
 # Web monitor dependencies
-cd ../web_monitor
+cd web_monitor
 pip install -r requirements.txt
 ```
 
@@ -132,6 +129,7 @@ Authentication: Session-based (login via web browser first)
 - Python 3.11+
 - Internet connection for market data
 - ~10MB storage for CSV data files
+- UNIX tools: `bash`, `curl`, `pgrep`, `awk`
 
 </details>
 
@@ -188,6 +186,62 @@ This system implements a **complete separation of concerns** between trade gener
    - Global internet access for remote monitoring
 
 </details>
+
+### ASCII Architecture & APIs
+
+```
+                                        (shell_logger.py / pipeline_logger.py)
+                   ┌────────────────┐       structured JSON logs       ┌─────────────────────────┐
+                   │   autopilot.sh │ ───────────────────────────────▶ │ logs/                   │
+                   │  (scheduler)   │  ◀───────────────┐               │  - pipeline_actions.jsonl
+                   └───────┬────────┘                  │               │  - execution_tracking.jsonl
+                           │ (invoke)                  │               │  - pipeline_errors.jsonl  │
+                           │                           │               └─────────────────────────┘
+            ┌──────────────┴──────────────┐            │
+            │                             │            │
+            ▼                             ▼            │
+┌──────────────────────┐        ┌──────────────────────┐ │    ┌───────────────────────────┐
+│ trading_script.py    │        │ ib_trading/cp_executor│ │    │ web_monitor (FastAPI + WS)│
+│ - market data (HTTP) │        │ - Client Portal REST │ │    │ - /api/* endpoints        │
+│ - stop-loss / signals│        │ - execution logging  │ │    │ - /ws websocket           │
+└──────────┬───────────┘        └──────────┬───────────┘ │    └───────────┬───────────────┘
+           │ CSV write                          │ REST API calls         │ file watch + cache
+           │                                     │                       │
+           ▼                                     ▼                       ▼
+┌───────────────────────────────────────────┐   ┌──────────────────────┐  ┌───────────────────────┐
+│ Scripts and CSV Files/                    │   │ IB Client Portal     │  │  /tmp/autopilot_status│
+│ - chatgpt_portfolio_update.csv            │   │ Gateway              │  │  (TUI status JSON)    │
+│ - chatgpt_trade_log.csv                   │   │ https://localhost:5000│ └───────────────────────┘
+│ - ib_trading/cp_execution_log.csv         │   │ /v1/api              │
+└───────────────────────────────────────────┘   └──────────────────────┘
+
+External Market Data:
+  - Yahoo Finance via yfinance (HTTPS)
+  - Stooq via pandas-datareader (HTTPS) or CSV (https://stooq.com/q/d/l/?s=...)
+
+Client Portal REST (examples):
+  GET    /tickle
+  GET    /iserver/auth/status
+  GET    /sso/validate            (best-effort)
+  POST   /iserver/reauthenticate  (interactive auth trigger)
+  GET    /portfolio/accounts
+  GET    /iserver/secdef/search?symbol=XYZ&secType=STK
+  POST   /iserver/account/{acctId}/orders                 (place order)
+  GET    /iserver/account/{acctId}/orders                 (order status)
+  DELETE /iserver/account/{acctId}/order/{orderId}        (cancel)
+
+Web Monitor API (http://localhost:8889):
+  GET  /api/status
+  GET  /api/portfolio
+  GET  /api/trades/pending
+  GET  /api/trades/executed?days=N
+  GET  /api/performance
+  GET  /api/logs
+  WS   /ws                       (real-time updates)
+
+Autopilot → Web Monitor:
+  POST /api/cache/refresh         (force refresh dashboard cache)
+```
 
 <details>
 <summary><strong>⚙️ Configuration</strong></summary>
@@ -292,11 +346,16 @@ display:
 ./autopilot.sh skip      # Skip next scheduled execution
 ```
 
+First run tip:
+
+- Use `./autopilot.sh fresh 10000` to clear state and initialize a clean portfolio with `$10,000` starting cash. Autopilot passes this to the trading script automatically.
+
 ### Manual Usage
 
 ```bash
-# Generate today's trade signals
-python trading_script.py --file "Start Your Own/chatgpt_portfolio_update.csv"
+# Generate today's trade signals (non-interactive)
+python trading_script.py --file "Start Your Own/chatgpt_portfolio_update.csv" \
+  --no-interactive --starting-cash 10000
 
 # Preview trades without executing
 cd ib_trading
@@ -322,7 +381,8 @@ python app.py &  # Run in background
 **Step 2 - Generate Trade Signals:**
 ```bash
 # Run ChatGPT trading script to update portfolio and generate signals
-python trading_script.py --file "Start Your Own/chatgpt_portfolio_update.csv"
+python trading_script.py --file "Start Your Own/chatgpt_portfolio_update.csv" \
+  --no-interactive --starting-cash 10000
 # Watch real-time updates in web dashboard
 ```
 
@@ -337,7 +397,7 @@ python cp_executor.py --dry-run --show-trades
 
 **Step 4 - Execute Trades:**
 ```bash
-# Start IB Gateway/TWS first, then execute
+# Start Client Portal Gateway first, then execute
 python cp_executor.py --execute-pending --date $(date +%Y-%m-%d)
 # Monitor execution in real-time via web dashboard
 ```
@@ -373,14 +433,22 @@ python cp_executor.py --dry-run --data-dir "../Start Your Own"
 ./demo_cp_integration.sh
 ```
 
+Additional checks (optional):
+
+```bash
+# From repo root
+python test_pipeline_logger.py    # Verifies structured logging + audit report
+python test_tui_integration.py    # Verifies TUI/status integration and shell helpers
+```
+
 ### Paper Trading Verification
 
 Before going live, always test with paper trading:
 
-1. **IB Gateway Setup**: Use port 7497 (paper trading)
-2. **Config**: Set `mode: "paper"` in `ib_config.yaml`
+1. **Client Portal Gateway**: Run locally on port 5000 (default)
+2. **Config**: Set `mode: "paper"` in `ib_trading/cp_config.yaml`
 3. **Test Small Orders**: Start with small quantities
-4. **Review Logs**: Check `ib_execution_log.csv` for execution details
+4. **Review Logs**: Check `ib_trading/cp_execution_log.csv` for execution details
 
 ```bash
 cd ib_trading
@@ -488,7 +556,8 @@ curl http://localhost:8889/api/logs
 
 ```bash
 # 1. Generate today's signals with ChatGPT script
-python trading_script.py --file "Scripts and CSV Files/chatgpt_portfolio_update.csv"
+python trading_script.py --file "Scripts and CSV Files/chatgpt_portfolio_update.csv" \
+  --no-interactive --starting-cash 10000
 
 # 2. Review what would be executed
 cd ib_trading
@@ -679,9 +748,9 @@ python cp_executor.py --dry-run --show-trades
    - Must explicitly configure for live trading
    - Clear separation between test and live configs
 
-4. **Confirmation Prompts**
-   - Requires user confirmation before execution
-   - Can be disabled with `--no-confirm` flag
+4. **Confirmation & Pending States**
+   - Requires user confirmation before execution (unless `--no-confirm`)
+   - Submitted/PreSubmitted orders are tracked but not counted as success until they are filled/complete
    - Shows trade summary before execution
 
 ### Going Live Safely
@@ -830,6 +899,16 @@ ChatGPT-Micro-Cap-Experiment/
 - **🌐 Interactive Trading** - Market-on-Open (MOO) and limit order support
 - **💾 Robust Data Sources** - Yahoo Finance primary, Stooq fallback for reliability
 
+### Dependencies
+
+Root environment:
+- pandas, numpy, yfinance, matplotlib
+- structlog (structured logging), rich (TUI), psutil (system metrics)
+- pandas-datareader (Stooq fallback), requests, PyYAML
+
+Web monitor:
+- fastapi, uvicorn, websockets (>=13), watchdog, aiofiles
+
 ---
 
 ## 🔗 Research & Documentation
@@ -894,12 +973,14 @@ If you feel inspired to do something similar, feel free to use this as a bluepri
    python -m venv venv
    source venv/bin/activate  # Windows: venv\Scripts\activate
    pip install -r requirements.txt
+   cd web_monitor && pip install -r requirements.txt && cd ..
    ```
 
 2. **Test Individual Components:**
    ```bash
-   # Test ChatGPT script
-   python trading_script.py --file "Start Your Own/chatgpt_portfolio_update.csv"
+   # Test ChatGPT script (non-interactive)
+   python trading_script.py --file "Start Your Own/chatgpt_portfolio_update.csv" \
+     --no-interactive --starting-cash 10000
    
    # Test trade detection
    cd ib_trading
@@ -916,6 +997,12 @@ If you feel inspired to do something similar, feel free to use this as a bluepri
 **⚠️ Start small, test thoroughly in paper mode, and scale gradually for the best results.**
 
 The autopilot system provides complete automation with unprecedented visibility into your trading pipeline. Monitor your system from anywhere in the world with the globally accessible dashboard.
+
+### Troubleshooting
+- Autopilot status: `./autopilot.sh status` (remove stale lock with `rm -f .autopilot.lock` if needed)
+- Self check: `./autopilot.sh selftest`
+- Logs: `./autopilot.sh logs` and JSONL files in `logs/`
+- Client Portal auth: login at the exact host in `cp_config.yaml` (e.g., `https://localhost:5000`)
 
 ---
 

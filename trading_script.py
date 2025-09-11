@@ -45,6 +45,7 @@ except Exception:
 
 # -------- AS-OF override --------
 ASOF_DATE: pd.Timestamp | None = None
+NO_INTERACTIVE: bool = False  # Set by CLI flag to disable all prompts
 
 def set_asof(date: str | datetime | pd.Timestamp | None) -> None:
     """Set a global 'as of' date so the script treats that day as 'today'. Use 'YYYY-MM-DD' format."""
@@ -783,11 +784,13 @@ If this is a mistake, enter 1. """
     elif reason is None:
         reason = ""
 
-    if ticker not in chatgpt_portfolio["ticker"].values:
+    # Normalize tickers to uppercase for comparison
+    tickers_upper = chatgpt_portfolio["ticker"].astype(str).str.upper().values
+    if ticker.upper() not in tickers_upper:
         print(f"Manual sell for {ticker} failed: ticker not in portfolio.")
         return cash, chatgpt_portfolio
-
-    ticker_row = chatgpt_portfolio[chatgpt_portfolio["ticker"] == ticker]
+    
+    ticker_row = chatgpt_portfolio[chatgpt_portfolio["ticker"].astype(str).str.upper() == ticker.upper()]
     total_shares = int(ticker_row["shares"].item())
     if shares_sold > total_shares:
         print(f"Manual sell for {ticker} failed: trying to sell {shares_sold} shares but only own {total_shares}.")
@@ -1023,10 +1026,11 @@ def daily_results(chatgpt_portfolio: pd.DataFrame, cash: float) -> None:
     if not spx_norm.empty:
         initial_price = float(spx_norm["Close"].iloc[0])
         price_now = float(spx_norm["Close"].iloc[-1])
+        # Use earliest TOTAL equity as starting equity if available; never prompt in automated mode
         try:
-            starting_equity = float(input("what was your starting equity? "))
+            starting_equity = float(equity_series.iloc[0]) if len(equity_series) > 0 else np.nan
         except Exception:
-            print("Invalid input for starting equity. Defaulting to NaN.")
+            starting_equity = np.nan
         spx_value = (starting_equity / initial_price) * price_now if not np.isnan(starting_equity) else np.nan
 
     # -------- Pretty Printing --------
@@ -1098,18 +1102,37 @@ def daily_results(chatgpt_portfolio: pd.DataFrame, cash: float) -> None:
 
 def load_latest_portfolio_state(
     file: str,
+    starting_cash: float | None = None,
+    interactive: bool = True,
 ) -> tuple[pd.DataFrame | list[dict[str, Any]], float]:
-    """Load the most recent portfolio snapshot and cash balance."""
-    df = pd.read_csv(file)
+    """Load the most recent portfolio snapshot and cash balance.
+
+    If CSV is empty:
+    - In interactive mode, prompt user for starting cash.
+    - In non-interactive mode, use `starting_cash` arg, or $STARTING_CASH env, or default 1000.0.
+    """
+    try:
+        df = pd.read_csv(file)
+    except FileNotFoundError:
+        df = pd.DataFrame()
     if df.empty:
         portfolio = pd.DataFrame(columns=["ticker", "shares", "stop_loss", "buy_price", "cost_basis"])
-        print("Portfolio CSV is empty. Returning set amount of cash for creating portfolio.")
-        try:
-            cash = float(input("What would you like your starting cash amount to be? "))
-        except ValueError:
-            raise ValueError(
-                "Cash could not be converted to float datatype. Please enter a valid number."
-            )
+        if interactive:
+            print("Portfolio CSV is empty. Returning set amount of cash for creating portfolio.")
+            try:
+                cash = float(input("What would you like your starting cash amount to be? "))
+            except ValueError:
+                raise ValueError(
+                    "Cash could not be converted to float datatype. Please enter a valid number."
+                )
+        else:
+            if starting_cash is None:
+                env_cash = os.environ.get("STARTING_CASH")
+                try:
+                    starting_cash = float(env_cash) if env_cash is not None else 1000.0
+                except Exception:
+                    starting_cash = 1000.0
+            cash = float(starting_cash)
         return portfolio, cash
 
     non_total = df[df["Ticker"] != "TOTAL"].copy()
@@ -1151,7 +1174,7 @@ def load_latest_portfolio_state(
     return latest_tickers, cash
 
 
-def main(file: str, data_dir: Path | None = None, interactive: bool = True) -> None:
+def main(file: str, data_dir: Path | None = None, interactive: bool = True, starting_cash: float | None = None) -> None:
     """Check versions, then run the trading script."""
     import time
     start_time = time.time()
@@ -1166,7 +1189,7 @@ def main(file: str, data_dir: Path | None = None, interactive: bool = True) -> N
     log_execution_start(main_exec_id)
     
     try:
-        chatgpt_portfolio, cash = load_latest_portfolio_state(file)
+        chatgpt_portfolio, cash = load_latest_portfolio_state(file, starting_cash=starting_cash, interactive=interactive)
         print(file)
         if data_dir is not None:
             set_data_dir(data_dir)
@@ -1200,12 +1223,21 @@ if __name__ == "__main__":
     parser.add_argument("--data-dir", default=None, help="Optional data directory")
     parser.add_argument("--asof", default=None, help="Treat this YYYY-MM-DD as 'today' (e.g., 2025-08-27)")
     parser.add_argument("--no-interactive", action="store_true", help="Disable manual trade prompts for automated execution")
+    parser.add_argument("--starting-cash", type=float, default=None, help="Starting cash to use when creating a new portfolio (non-interactive)")
     args = parser.parse_args()
 
     if args.asof:
         set_asof(args.asof)
 
+    NO_INTERACTIVE = bool(args.no_interactive)
+    # Allow env fallback for starting cash
+    sc = args.starting_cash
+    if sc is None:
+        env_sc = os.environ.get("STARTING_CASH")
+        try:
+            sc = float(env_sc) if env_sc is not None else None
+        except Exception:
+            sc = None
     if not Path(args.file).exists():
-        print("No portfolio CSV found. Create one or run main() with your file path.")
-    else:
-        main(args.file, Path(args.data_dir) if args.data_dir else None, interactive=not args.no_interactive)
+        print("No portfolio CSV found. Creating a new one at provided path.")
+    main(args.file, Path(args.data_dir) if args.data_dir else None, interactive=not args.no_interactive, starting_cash=sc)

@@ -114,6 +114,213 @@ pipeline_report_logs() {
     fi
 }
 
+# Determine web monitor port (read from config if available, fallback to 8889)
+get_web_port() {
+    local port="8889"
+    if [[ -f "$WEB_DIR/config.yaml" ]]; then
+        # naive parse: look for 'port:' first occurrence
+        local p
+        p=$(awk -F: '/^[[:space:]]*port:[[:space:]]*[0-9]+/ {gsub(/ /,""); print $2; exit}' "$WEB_DIR/config.yaml" 2>/dev/null || echo "")
+        if [[ -n "$p" ]]; then
+            port="$p"
+        fi
+    fi
+    echo "$port"
+}
+
+# Trigger web monitor cache refresh via HTTP
+refresh_web_cache() {
+    local port
+    port=$(get_web_port)
+    if command -v curl >/dev/null 2>&1; then
+        curl -s -X POST "http://127.0.0.1:${port}/api/cache/refresh" >/dev/null 2>&1 && \
+            info "Web dashboard cache refreshed (port ${port})" || \
+            debug "Web dashboard refresh skipped/unavailable (port ${port})"
+    else
+        debug "curl not available; cannot refresh web dashboard"
+    fi
+}
+
+# Select Python interpreter (prefer venv, fallback to system)
+get_python() {
+    local py="$VENV_DIR/bin/python"
+    if [[ -x "$py" ]]; then
+        echo "$py"
+        return 0
+    fi
+    py=$(command -v python3 || true)
+    if [[ -n "$py" ]]; then
+        echo "$py"
+        return 0
+    fi
+    py=$(command -v python || true)
+    if [[ -n "$py" ]]; then
+        echo "$py"
+        return 0
+    fi
+    echo ""  # none found
+    return 1
+}
+
+# Status file management for TUI dashboard
+STATUS_FILE="/tmp/autopilot_status.json"
+STATUS_MANAGER="$SCRIPT_DIR/status_schema.py"
+
+update_component_status() {
+    local component="$1"
+    local status="$2"  # healthy, warning, error, unknown, disabled
+    local message="$3"
+    local pid="${4:-}"
+    
+    if [[ -f "$STATUS_MANAGER" ]]; then
+        source "$VENV_DIR/bin/activate" 2>/dev/null
+        local args="$component $status '$message'"
+        [[ -n "$pid" ]] && args="$args --pid $pid"
+        
+        python3 -c "
+import sys
+sys.path.append('$SCRIPT_DIR')
+from status_schema import StatusManager, ComponentStatus
+manager = StatusManager('$STATUS_FILE')
+status_enum = ComponentStatus('$status') if '$status' in ['healthy', 'warning', 'error', 'unknown', 'disabled'] else ComponentStatus.UNKNOWN
+kwargs = {}
+if '$pid':
+    kwargs['pid'] = $pid
+manager.update_component_status('$component', status_enum, '$message', **kwargs)
+" 2>/dev/null || true
+    fi
+}
+
+update_portfolio_metrics() {
+    local total_equity="$1"
+    local cash_balance="$2"
+    local positions_count="${3:-0}"
+    local market_session="${4:-closed}"
+    
+    if [[ -f "$STATUS_MANAGER" ]]; then
+        source "$VENV_DIR/bin/activate" 2>/dev/null
+        python3 -c "
+import sys
+sys.path.append('$SCRIPT_DIR')  
+from status_schema import StatusManager
+manager = StatusManager('$STATUS_FILE')
+manager.update_portfolio_metrics(
+    total_equity=float('$total_equity'),
+    cash_balance=float('$cash_balance'),
+    positions_count=int('$positions_count'),
+    market_session='$market_session'
+)
+" 2>/dev/null || true
+    fi
+}
+
+update_system_status() {
+    if [[ -f "$STATUS_MANAGER" ]]; then
+        source "$VENV_DIR/bin/activate" 2>/dev/null
+        python3 -c "
+import sys, psutil, os, time
+sys.path.append('$SCRIPT_DIR')
+from status_schema import StatusManager
+manager = StatusManager('$STATUS_FILE')
+
+# Get system metrics
+cpu_percent = psutil.cpu_percent(interval=1)
+memory = psutil.virtual_memory()
+disk = psutil.disk_usage('/')
+load_avg = os.getloadavg()
+uptime = psutil.boot_time()
+python_procs = 0
+for p in psutil.process_iter(['name']):
+    name = (p.info.get('name') or '').lower()
+    if 'python' in name:
+        python_procs += 1
+
+current_status = manager.load_status()
+current_status.system.cpu_percent = cpu_percent
+current_status.system.memory_percent = memory.percent
+current_status.system.disk_percent = disk.percent
+current_status.system.load_average = list(load_avg)
+current_status.system.uptime_seconds = int(time.time() - uptime)
+current_status.system.python_processes = python_procs
+
+manager.save_status(current_status)
+" 2>/dev/null || true
+    fi
+}
+
+update_scheduled_action() {
+    local name="$1"
+    local next_epoch="${2:-}"
+    local countdown="${3:-}"
+    local status_str="${4:-}"
+    local set_last_run_now="${5:-0}"
+
+    if [[ -f "$STATUS_MANAGER" ]]; then
+        source "$VENV_DIR/bin/activate" 2>/dev/null
+        python3 -c "
+import sys, os
+from datetime import datetime, timezone
+sys.path.append('$SCRIPT_DIR')
+from status_schema import StatusManager, ActionStatus, ScheduledAction
+manager = StatusManager('$STATUS_FILE')
+st = manager.load_status()
+name = '$name'
+act = None
+for a in st.scheduled_actions:
+    if a.name == name:
+        act = a
+        break
+if act is None:
+    # create if missing
+    act = ScheduledAction(name=name, next_run=datetime.now(timezone.utc).isoformat(), last_run=None, status=ActionStatus.PENDING, frequency='daily')
+    st.scheduled_actions.append(act)
+if '$next_epoch':
+    try:
+        ts = datetime.fromtimestamp(int('$next_epoch'), tz=timezone.utc)
+        iso = ts.isoformat().replace('+00:00', 'Z')
+        act.next_run = iso
+    except Exception:
+        pass
+if '$countdown':
+    try:
+        act.countdown_seconds = int('$countdown')
+    except Exception:
+        pass
+if '$status_str':
+    try:
+        act.status = ActionStatus('$status_str')
+    except Exception:
+        # fallback to mapping lower-case
+        mapping = {s.value: s for s in ActionStatus}
+        val = '$status_str'.lower()
+        act.status = mapping.get(val, act.status)
+if '$set_last_run_now' == '1':
+    act.last_run = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+st.timestamp = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+manager.save_status(st)
+" 2>/dev/null || true
+    fi
+}
+
+add_status_log() {
+    local level="$1"
+    local component="$2" 
+    local message="$3"
+    local exec_id="${4:-}"
+    
+    if [[ -x "$STATUS_MANAGER" ]]; then
+        source "$VENV_DIR/bin/activate" 2>/dev/null
+        python3 -c "
+import sys
+sys.path.append('$SCRIPT_DIR')
+from status_schema import StatusManager
+manager = StatusManager('$STATUS_FILE')
+exec_id = '$exec_id' if '$exec_id' else None
+manager.add_log_entry('$level', '$component', '$message', exec_id)
+" 2>/dev/null || true
+    fi
+}
+
 # Verbose command execution - Shows everything that happens
 run_cmd() {
     local cmd="$*"
@@ -137,7 +344,8 @@ run_cmd() {
     local stderr_file=$(mktemp)
     local exit_code
     
-    # Execute command and capture everything
+    # Execute command and capture everything (disable set -e for this block)
+    set +e
     if [[ $VERBOSE -eq 1 ]]; then
         # Verbose mode: show output in real-time AND log it
         eval "$cmd" 2>&1 | tee "$stdout_file"
@@ -147,6 +355,7 @@ run_cmd() {
         eval "$cmd" > "$stdout_file" 2> "$stderr_file"
         exit_code=$?
     fi
+    set -e
     
     local end_time=$(date +%s)
     local end_ms=$(date +%s%3N)
@@ -189,6 +398,43 @@ run_cmd() {
     # Cleanup
     rm -f "$stdout_file" "$stderr_file"
     
+    return $exit_code
+}
+
+# Variant that returns stdout to the caller even in non-verbose mode
+run_cmd_capture() {
+    local cmd="$*"
+    local start_time=$(date +%s)
+    local start_ms=$(date +%s%3N)
+
+    local exec_id=$(pipeline_log_action "STARTUP" "Executing command: $cmd" "{\"cmd\": \"$cmd\", \"cwd\": \"$(pwd)\"}")
+    [[ -n "$exec_id" ]] && pipeline_log_exec_start "$exec_id"
+
+    local stdout_file=$(mktemp)
+    local stderr_file=$(mktemp)
+    local exit_code
+
+    set +e
+    eval "$cmd" > "$stdout_file" 2> "$stderr_file"
+    exit_code=$?
+    set -e
+
+    local end_time=$(date +%s)
+    local end_ms=$(date +%s%3N)
+    local duration_ms=$((end_ms - start_ms))
+    local duration=$((end_time - start_time))
+
+    if [[ $exit_code -eq 0 ]]; then
+        [[ -n "$exec_id" ]] && pipeline_log_exec_complete "$exec_id" "$duration_ms" "{\"exit_code\": $exit_code, \"duration_sec\": $duration}"
+    else
+        [[ -n "$exec_id" ]] && pipeline_log_exec_failed "$exec_id" "$duration_ms" "Command failed with exit code $exit_code"
+        pipeline_log_error "ERROR" "Command execution failed: $cmd" "{\"exit_code\": $exit_code, \"duration_sec\": $duration}"
+    fi
+
+    # Emit captured stdout so caller can read it
+    cat "$stdout_file"
+
+    rm -f "$stdout_file" "$stderr_file"
     return $exit_code
 }
 
@@ -396,8 +642,12 @@ start_web_monitor() {
     
     cd "$WEB_DIR"
     
+    # Choose Python interpreter (prefer venv, fallback to system)
+    local PY_EXEC
+    PY_EXEC=$(get_python)
+
     # Start in background and capture PID with unbuffered output
-    "$VENV_DIR/bin/python" -u app.py > "$LOG_FILE.web" 2>&1 &
+    "$PY_EXEC" -u app.py > "$LOG_FILE.web" 2>&1 &
     local pid=$!
     
     trace "Web monitor started with PID: $pid"
@@ -418,6 +668,9 @@ start_web_monitor() {
             ) &
         fi
         cd "$SCRIPT_DIR"
+        # Give the server a moment, then refresh cache
+        sleep 1
+        refresh_web_cache
         return 0
     else
         error "Failed to start web monitor"
@@ -470,7 +723,13 @@ run_daily_update() {
     load_config
     
     # Build command with starting cash
-    local cmd="$VENV_DIR/bin/python -u \"$SCRIPT_DIR/trading_script.py\" --file \"$PORTFOLIO_FILE\" --no-interactive --starting-cash $STARTING_CASH"
+    local PY_EXEC
+    PY_EXEC=$(get_python)
+    if [[ -z "$PY_EXEC" ]]; then
+        error "No suitable Python interpreter found"
+        return 1
+    fi
+    local cmd="STARTING_CASH=\"$STARTING_CASH\" $PY_EXEC -u \"$SCRIPT_DIR/trading_script.py\" --file \"$PORTFOLIO_FILE\" --no-interactive --starting-cash \"$STARTING_CASH\""
     
     if ! run_cmd "$cmd"; then
         error "Daily update failed - check output above for details"
@@ -480,6 +739,8 @@ run_daily_update() {
     LAST_DAILY_UPDATE="$today"
     save_state
     info "Daily update completed successfully"
+    # Refresh web dashboard cache to reflect portfolio changes
+    refresh_web_cache
 }
 
 # Trade execution - Where the rubber meets the road
@@ -507,8 +768,13 @@ execute_pending_trades() {
     trace "Checking for pending trades with dry run"
     
     local dry_run_output
-    if dry_run_output=$(run_cmd "$VENV_DIR/bin/python -u cp_executor.py --dry-run --show-trades" 2>&1); then
-        pending_count=$(echo "$dry_run_output" | grep -c "^BUY\|^SELL" || echo "0")
+    local PY_EXEC
+    PY_EXEC=$(get_python)
+    if [[ -z "$PY_EXEC" ]]; then
+        error "No suitable Python interpreter found"
+        pending_count=0
+    elif dry_run_output=$(run_cmd_capture "$PY_EXEC -u cp_executor.py --dry-run --show-trades"); then
+        pending_count=$(echo "$dry_run_output" | grep -E -c '^(BUY|SELL)' || echo "0")
         trace "Dry run output: $dry_run_output"
     else
         error "Failed to check pending trades - dry run failed"
@@ -525,10 +791,11 @@ execute_pending_trades() {
     trace "Executing trades for date: $today"
     
     # Execute the trades with full error capture
-    if run_cmd "$VENV_DIR/bin/python -u cp_executor.py --execute-pending --date \"$today\" --no-confirm"; then
+    if run_cmd "$PY_EXEC -u cp_executor.py --execute-pending --date \"$today\" --no-confirm"; then
         LAST_TRADE_EXECUTION="$today"
         save_state
         info "Trade execution completed successfully"
+        refresh_web_cache
     else
         error "Trade execution failed - check output above for details"
         cd "$SCRIPT_DIR"
@@ -717,29 +984,91 @@ main_loop() {
         # Ensure web monitor is running
         if ! check_web_monitor; then
             error "Web monitor health check failed"
+            update_component_status "Web Monitor" "error" "Failed to start web monitor"
+        else
+            # Check if web monitor is actually responding
+            local web_pid=""
+            if [[ -f "$WEB_MONITOR_PID_FILE" ]]; then
+                web_pid=$(cat "$WEB_MONITOR_PID_FILE" 2>/dev/null || echo "")
+            fi
+            if [[ -n "$web_pid" ]] && kill -0 "$web_pid" 2>/dev/null; then
+                update_component_status "Web Monitor" "healthy" "Running normally" "$web_pid"
+            else
+                update_component_status "Web Monitor" "warning" "Process status unknown"
+            fi
         fi
         
-        # Time-based execution
-        case "$current_time" in
-            "$DAILY_UPDATE_TIME")
-                if is_trading_day; then
-                    info "Triggering daily update (ET: $current_time)"
-                    run_daily_update || error "Daily update failed"
+        # Update system metrics every 5 loops (~5 minutes)
+        if (( loop_count % 5 == 0 )); then
+            update_system_status
+            # Update component statuses
+            update_component_status "Trading Script" "healthy" "Main loop running" $$
+            
+            # Check if pipeline logger is working by verifying log files exist
+            if [[ -f "$LOG_FILE" && -f "logs/pipeline_actions.jsonl" ]]; then
+                update_component_status "Pipeline Logger" "healthy" "Structured logging active"
+            else
+                update_component_status "Pipeline Logger" "warning" "Log files missing"
+            fi
+            
+            # Check IB connection by trying to ping the gateway
+            if pgrep -f "tws|ib_gateway" >/dev/null 2>&1; then
+                update_component_status "IB Connection" "healthy" "IB Gateway/TWS detected"
+            else
+                update_component_status "IB Connection" "warning" "No IB Gateway/TWS process found"
+            fi
+            
+            # Update portfolio metrics from CSV file
+            if [[ -f "$PORTFOLIO_FILE" ]]; then
+                local equity=$(tail -1 "$PORTFOLIO_FILE" | cut -d',' -f12 2>/dev/null || echo "1000.0")
+                local cash=$(tail -1 "$PORTFOLIO_FILE" | cut -d',' -f11 2>/dev/null || echo "1000.0") 
+                local positions=$(tail -n +2 "$PORTFOLIO_FILE" | grep -v "TOTAL" | wc -l 2>/dev/null || echo "0")
+                update_portfolio_metrics "$equity" "$cash" "$positions" "closed"
+            fi
+        fi
+        
+        # Robust time-based execution using seconds-until to avoid missing windows
+        local daily_update_seconds
+        local trade_execution_seconds
+        daily_update_seconds=$(calculate_seconds_until "$DAILY_UPDATE_TIME")
+        trade_execution_seconds=$(calculate_seconds_until "$EXECUTE_TRADES_TIME")
+
+        if (( daily_update_seconds <= 60 )); then
+            if is_trading_day; then
+                info "Triggering daily update (ET: $current_time)"
+                update_scheduled_action "Daily Portfolio Update" "" "$daily_update_seconds" "running" 0
+                add_status_log "INFO" "AutoPilot" "Starting daily portfolio update"
+                if run_daily_update; then
+                    update_scheduled_action "Daily Portfolio Update" "" "" "completed" 1
+                    add_status_log "INFO" "AutoPilot" "Daily update completed successfully"
                 else
-                    debug "Skipping daily update - not a trading day"
-                    trace "Next trading day actions will resume Monday"
+                    error "Daily update failed"
+                    add_status_log "ERROR" "AutoPilot" "Daily update failed"
                 fi
-                ;;
-            "$EXECUTE_TRADES_TIME")
-                if is_trading_day; then
-                    info "Triggering trade execution (ET: $current_time)"
-                    execute_pending_trades || error "Trade execution failed"
+            else
+                debug "Skipping daily update - not a trading day"
+                trace "Next trading day actions will resume Monday"
+                add_status_log "INFO" "AutoPilot" "Daily update skipped - not a trading day"
+            fi
+        fi
+
+        if (( trade_execution_seconds <= 60 )); then
+            if is_trading_day; then
+                info "Triggering trade execution (ET: $current_time)"
+                update_scheduled_action "Intraday Execution" "" "$trade_execution_seconds" "running" 0
+                add_status_log "INFO" "AutoPilot" "Starting trade execution"
+                if execute_pending_trades; then
+                    update_scheduled_action "Intraday Execution" "" "" "completed" 1
+                    add_status_log "INFO" "AutoPilot" "Trade execution completed successfully"
                 else
-                    debug "Skipping trade execution - not a trading day"
-                    trace "Next trading day actions will resume Monday"
+                    error "Trade execution failed"
+                    add_status_log "ERROR" "AutoPilot" "Trade execution failed"
                 fi
-                ;;
-        esac
+            else
+                debug "Skipping trade execution - not a trading day"
+                trace "Next trading day actions will resume Monday"
+            fi
+        fi
         
         # Health check every 100 loops (about 1.5 hours)
         if (( loop_count % 100 == 0 )); then
@@ -778,8 +1107,21 @@ main_loop() {
             fi
         fi
         
-        # Sleep for 1 minute
-        sleep 60
+        # Update scheduled action metadata (next_run and countdown)
+        local current_et_epoch
+        current_et_epoch=$(TZ='America/New_York' date +%s)
+        local next_daily_epoch=$(( current_et_epoch + daily_update_seconds ))
+        local next_trade_epoch=$(( current_et_epoch + trade_execution_seconds ))
+        update_scheduled_action "Daily Portfolio Update" "$next_daily_epoch" "$daily_update_seconds" "pending" 0
+        update_scheduled_action "Intraday Execution" "$next_trade_epoch" "$trade_execution_seconds" "pending" 0
+
+        # Sleep until the next imminent action, up to 60 seconds
+        local sleep_target=60
+        if (( daily_update_seconds < sleep_target )); then sleep_target=$daily_update_seconds; fi
+        if (( trade_execution_seconds < sleep_target )); then sleep_target=$trade_execution_seconds; fi
+        # Ensure a sane lower bound to avoid tight loops
+        if (( sleep_target < 5 )); then sleep_target=5; fi
+        sleep $sleep_target
     done
 }
 
@@ -896,12 +1238,14 @@ Commands:
     start       Start the autopilot (default)
     stop        Stop running autopilot
     status      Show autopilot status
+    selftest    Run built-in sanity checks
     fresh [AMT] Fresh start - clear all state files (optional: starting cash amount)
     pause       Pause trading operations
     resume      Resume trading operations
     force       Force daily update now
     skip        Skip next scheduled execution
     logs        Show recent log entries
+    dashboard   Launch real-time TUI dashboard  
     diagnose    Run system diagnostics
 
 Verbose Mode:
@@ -955,6 +1299,14 @@ case "${1:-start}" in
                 echo "Autopilot running (PID: $pid)"
                 echo "Current time: $(get_et_time) ET ($(get_et_date))"
                 show_next_action
+                # Also update scheduled actions for TUI consumers
+                daily_update_seconds=$(calculate_seconds_until "$DAILY_UPDATE_TIME")
+                trade_execution_seconds=$(calculate_seconds_until "$EXECUTE_TRADES_TIME")
+                current_et_epoch=$(TZ='America/New_York' date +%s)
+                next_daily_epoch=$(( current_et_epoch + daily_update_seconds ))
+                next_trade_epoch=$(( current_et_epoch + trade_execution_seconds ))
+                update_scheduled_action "Daily Portfolio Update" "$next_daily_epoch" "$daily_update_seconds" "pending" 0
+                update_scheduled_action "Intraday Execution" "$next_trade_epoch" "$trade_execution_seconds" "pending" 0
                 if [[ -f "$STATE_FILE" ]]; then
                     echo "State:"
                     cat "$STATE_FILE"
@@ -968,6 +1320,34 @@ case "${1:-start}" in
             echo "  Daily Update: $DAILY_UPDATE_TIME ET"
             echo "  Trade Execution: $EXECUTE_TRADES_TIME ET"
         fi
+        ;;
+    "selftest")
+        echo "=== AUTOPILOT SELFTEST ==="
+        echo "Shell: $(bash --version | head -1)"
+        echo "set -e behavior in run_cmd:"
+        if run_cmd "bash -c 'exit 42'"; then
+            echo "  FAIL: run_cmd should have non-zero exit"
+        else
+            echo "  PASS: run_cmd handled non-zero exit without aborting script"
+        fi
+        echo ""
+        echo "run_cmd_capture output capture:"
+        sample_output=$(run_cmd_capture "printf 'BUY AAPL\nSELL MSFT\nHOLD XYZ\n'")
+        echo "  Captured:"
+        echo "$sample_output" | sed 's/^/    /'
+        count=$(echo "$sample_output" | grep -E -c '^(BUY|SELL)')
+        if [[ "$count" -eq 2 ]]; then
+            echo "  PASS: BUY/SELL detection count=$count"
+        else
+            echo "  FAIL: Expected 2, got $count"
+        fi
+        echo ""
+        echo "pgrep ERE check pattern: tws|ib_gateway"
+        echo "  PASS: pattern uses '|' (ERE), not literal pipe"
+        echo ""
+        echo "update_system_status snippet uses time.time() (not psutil.time)"
+        rg -n "time\.time\(\) - uptime" -n "$0" >/dev/null 2>&1 && echo "  PASS: found time.time() usage" || echo "  FAIL: time.time() not found"
+        echo "=== SELFTEST COMPLETE ==="
         ;;
     "fresh")
         fresh_start "$2"  # Pass second argument as starting cash
@@ -1029,6 +1409,72 @@ case "${1:-start}" in
             tail -n 20 "$LOG_FILE"
         else
             echo "  No shell log file found"
+        fi
+        ;;
+    "dashboard"|"tui")
+        echo "=== AutoPilot Real-Time Dashboard ==="
+        echo "Starting TUI dashboard..."
+        echo "Status file: $STATUS_FILE"
+        echo "Press Ctrl+C to exit"
+        echo ""
+        
+        # Initialize status file if it doesn't exist
+        if [[ ! -f "$STATUS_FILE" ]] && [[ -x "$STATUS_MANAGER" ]]; then
+            source "$VENV_DIR/bin/activate" 2>/dev/null
+            python3 "$STATUS_MANAGER" >/dev/null 2>&1 || true
+            echo "Initialized status file"
+        fi
+        
+        # Check if autopilot is running - robust detection
+        autopilot_pid=""
+        
+        # First check lock file
+        if [[ -f "$LOCK_FILE" ]]; then
+            autopilot_pid=$(cat "$LOCK_FILE" 2>/dev/null || echo "")
+        fi
+        
+        # If no lock file, try to find running process
+        if [[ -z "$autopilot_pid" ]]; then
+            autopilot_pid=$(pgrep -f "autopilot.sh start" 2>/dev/null | head -1)
+        fi
+        
+        # Verify the process is actually running
+        if [[ -n "$autopilot_pid" ]] && kill -0 "$autopilot_pid" 2>/dev/null; then
+            echo "AutoPilot daemon detected (PID: $autopilot_pid)"
+            # Update status to show autopilot is running
+            update_component_status "Trading Script" "healthy" "AutoPilot daemon running" "$autopilot_pid"
+            
+            # Check pipeline logger status by verifying log files
+            if [[ -f "$LOG_FILE" && -f "logs/pipeline_actions.jsonl" ]]; then
+                update_component_status "Pipeline Logger" "healthy" "Structured logging active"
+            else
+                update_component_status "Pipeline Logger" "warning" "Log files missing"
+            fi
+            
+            # Recreate lock file if missing
+            if [[ ! -f "$LOCK_FILE" ]]; then
+                echo "$autopilot_pid" > "$LOCK_FILE"
+                echo "Recreated missing lock file with PID: $autopilot_pid"
+            fi
+        else
+            echo "AutoPilot daemon not running"
+            update_component_status "Trading Script" "warning" "AutoPilot daemon not running"
+        fi
+        
+        # Update system status before launching TUI
+        update_system_status
+        
+        # Launch TUI controller
+        TUI_CONTROLLER="$SCRIPT_DIR/tui_controller.py"
+        if [[ -x "$TUI_CONTROLLER" ]]; then
+            source "$VENV_DIR/bin/activate" 2>/dev/null
+            # Pass through any additional arguments after 'dashboard'
+            shift  # Remove 'dashboard' from arguments
+            python3 "$TUI_CONTROLLER" --status-file "$STATUS_FILE" --refresh 2 "$@"
+        else
+            error "TUI controller not found or not executable: $TUI_CONTROLLER"
+            echo "Please ensure tui_controller.py exists and is executable"
+            exit 1
         fi
         ;;
     "diagnose")

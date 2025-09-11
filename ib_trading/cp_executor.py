@@ -220,7 +220,8 @@ class ClientPortalExecutor:
                     monitor.mark_trade_processed(trade_data, order_id)
                     break
             
-            return status.lower() in ['filled', 'complete', 'submitted', 'presubmitted']
+            # Treat only filled/complete as successful executions; submitted states are not counted as success
+            return status.lower() in ['filled', 'complete']
             
         except ClientPortalError as e:
             self.logger.error(f"Client Portal error executing trade {ticker}: {e}")

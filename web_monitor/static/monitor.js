@@ -284,6 +284,7 @@ class TradingMonitor {
         });
         
         // Update summary
+        // Total value updated here as sum of positions; will be overridden by performance metrics if available
         if (this.elements.totalValue) {
             this.elements.totalValue.textContent = `$${totalValue.toFixed(2)}`;
         }
@@ -648,3 +649,12 @@ class TradingMonitor {
 document.addEventListener('DOMContentLoaded', () => {
     window.tradingMonitor = new TradingMonitor();
 });
+        // If portfolio summary exists, update the top-line Total Value/P&L to reflect TOTAL row (even with 0 positions)
+        if (this.elements.totalValue && typeof portfolio.total_value === 'number') {
+            this.elements.totalValue.textContent = `$${portfolio.total_value.toFixed(2)}`;
+        }
+        if (this.elements.totalPnL && typeof portfolio.total_pnl === 'number') {
+            const pnl = portfolio.total_pnl;
+            this.elements.totalPnL.textContent = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
+            this.elements.totalPnL.className = pnl >= 0 ? 'positive' : 'negative';
+        }

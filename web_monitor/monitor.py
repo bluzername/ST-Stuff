@@ -316,17 +316,59 @@ class PipelineMonitor:
                 except Exception as e:
                     self.logger.error(f"Error reading executions from {exec_file}: {e}")
         
-        return sorted(executions, key=lambda x: f"{x['execution_date']} {x['execution_time']}", reverse=True)
+        # Sort by actual datetime when possible
+        def _to_dt(e: Dict[str, Any]) -> datetime:
+            ts = f"{e.get('execution_date','')} {str(e.get('execution_time',''))[:8]}".strip()
+            try:
+                return datetime.strptime(ts, '%Y-%m-%d %H:%M:%S')
+            except Exception:
+                return datetime.min
+        return sorted(executions, key=_to_dt, reverse=True)
     
     def get_performance_metrics(self) -> Dict[str, Any]:
         """Calculate performance metrics"""
         portfolio = self.get_current_portfolio()
         executions = self.get_execution_history(days=30)
-        
+
         # Current portfolio metrics
         total_value = sum(p['market_value'] for p in portfolio)
         total_pnl = sum(p['unrealized_pnl'] for p in portfolio)
         total_positions = len([p for p in portfolio if p['shares'] > 0])
+
+        # Fallback: if no open positions (or CSV only has TOTAL), derive from TOTAL row
+        if total_value == 0 or total_positions == 0:
+            newest_file = None
+            newest_time = None
+            for data_dir in self.data_dirs:
+                f = data_dir / "chatgpt_portfolio_update.csv"
+                if f.exists():
+                    try:
+                        mtime = f.stat().st_mtime
+                        if newest_time is None or mtime > newest_time:
+                            newest_time = mtime
+                            newest_file = f
+                    except Exception:
+                        continue
+            if newest_file:
+                try:
+                    df = pd.read_csv(newest_file)
+                    if not df.empty:
+                        total_rows = df[df['Ticker'].astype(str).str.upper() == 'TOTAL']
+                        if not total_rows.empty:
+                            tr = total_rows.iloc[-1]
+                            # Prefer 'Total Equity' if present, else 'Total Value'
+                            if 'Total Equity' in tr and pd.notna(tr['Total Equity']):
+                                total_value = float(tr['Total Equity'])
+                            elif 'Total Value' in tr and pd.notna(tr['Total Value']):
+                                total_value = float(tr['Total Value'])
+                            # P&L total if available
+                            if 'PnL' in tr and pd.notna(tr['PnL']):
+                                try:
+                                    total_pnl = float(tr['PnL'])
+                                except Exception:
+                                    pass
+                except Exception as e:
+                    self.logger.error(f"Error deriving portfolio totals from {newest_file}: {e}")
         
         # Execution metrics
         filled_orders = [e for e in executions if e['status'] == 'FILLED']

@@ -58,8 +58,17 @@ def cmd_startup(args):
     component = args.component
     details = parse_json_safely(args.details)
     
-    exec_id = log_startup(component, details)
-    print(exec_id)  # Return execution ID for shell to use
+    # Redirect structured log output to stderr to avoid capture by shell
+    import sys
+    old_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    
+    try:
+        exec_id = log_startup(component, details)
+    finally:
+        sys.stdout = old_stdout
+    
+    print(exec_id)  # Return ONLY execution ID for shell to use
     return 0
 
 
@@ -69,8 +78,17 @@ def cmd_action(args):
     category = get_action_category(args.category)
     details = parse_json_safely(args.details)
     
-    exec_id = logger.log_action(category, args.action, details)
-    print(exec_id)  # Return execution ID for shell to use
+    # Redirect structured log output to stderr to avoid capture by shell
+    import sys
+    old_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    
+    try:
+        exec_id = logger.log_action(category, args.action, details)
+    finally:
+        sys.stdout = old_stdout
+    
+    print(exec_id)  # Return ONLY execution ID for shell to use
     return 0
 
 

@@ -130,12 +130,12 @@ class PipelineLogger:
             cache_logger_on_first_use=True,
         )
         
-        # Configure standard library logging for file output
+        # Configure standard library logging for console output only.
+        # File writes are handled explicitly via _write_to_file to avoid duplication.
         logging.basicConfig(
             format="%(message)s",
             level=getattr(logging, DEFAULT_LOG_LEVEL),
             handlers=[
-                logging.FileHandler(self.action_log, mode='a'),
                 logging.StreamHandler(sys.stdout),
             ]
         )
