@@ -1,0 +1,43 @@
+{
+  "name": "pcb-mcp-server",
+  "version": "1.0.0",
+  "description": "Production-grade MCP server for AI-assisted PCB design using tscircuit",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "benchmark": "tsx tests/benchmarks/benchmark-runner.ts",
+    "build": "tsc --noEmit",
+    "quick-test": "tsx tests/quick-test.ts"
+  },
+  "keywords": [
+    "mcp",
+    "pcb",
+    "tscircuit",
+    "electronics",
+    "circuit-design"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "@tscircuit/core": "^0.0.1015",
+    "@tscircuit/eval": "^0.0.625",
+    "@tscircuit/footprinter": "^0.0.310",
+    "@tscircuit/infgrid-ijump-astar": "^0.0.35",
+    "circuit-json": "^0.0.378",
+    "circuit-json-to-gerber": "^0.0.46",
+    "react": "^19.2.4",
+    "schematic-symbols": "^0.0.209",
+    "tscircuit": "^0.0.1278",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.1",
+    "vitest": "^4.0.18"
+  }
+}
