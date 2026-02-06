@@ -103,13 +103,15 @@ export function calculateBoardStats(circuitJson: CircuitElement[]): BoardStats {
   const boardWidth = pcbBoard?.width ?? 0;
   const boardHeight = pcbBoard?.height ?? 0;
 
-  // Routing completion: source traces that have corresponding pcb traces
-  // minus trace errors divided by total source traces
+  // Routing completion: compare successful pcb_traces to source_traces.
+  // pcb_trace_errors include both unrouted traces AND overlap/clearance issues
+  // on routed traces. A trace can be "routed" but have errors.
+  // Best metric: pcb_trace count vs source_trace count.
   const totalSourceTraces = sourceTraces.length;
-  const failedTraces = traceErrors.length;
+  const routedPcbTraces = pcbTraces.length;
   const routingPct =
     totalSourceTraces > 0
-      ? Math.round(((totalSourceTraces - failedTraces) / totalSourceTraces) * 100)
+      ? Math.max(0, Math.min(100, Math.round((routedPcbTraces / totalSourceTraces) * 100)))
       : 100;
 
   const elementTypes = [...new Set(circuitJson.map((el) => el.type))];
@@ -157,9 +159,12 @@ export function runBasicDrc(
     });
   }
 
-  // Check for generic errors
+  // Check for generic errors (exclude supplier fetch errors which are environment-specific)
   const errors = circuitJson.filter(
-    (el) => el.type.includes("error") && el.type !== "pcb_trace_error"
+    (el) =>
+      el.type.includes("error") &&
+      el.type !== "pcb_trace_error" &&
+      el.type !== "unknown_error_finding_part"
   );
   for (const err of errors) {
     violations.push({
