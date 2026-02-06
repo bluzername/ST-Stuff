@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "pcb-designer": {
+      "command": "npx",
+      "args": ["tsx", "src/index.ts"],
+      "cwd": "/path/to/pcb-mcp-server",
+      "env": {
+        "FREEROUTING_JAR": "/path/to/freerouting.jar"
+      }
+    }
+  }
+}
