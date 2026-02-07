@@ -40,6 +40,7 @@ function generateComponentTsx(comp: ComponentDef): string {
       break;
     case "crystal":
       if (comp.properties.frequency) attrs.push(`frequency="${comp.properties.frequency}"`);
+      if (comp.properties.loadCapacitance) attrs.push(`loadCapacitance="${comp.properties.loadCapacitance}"`);
       break;
     default:
       break;
